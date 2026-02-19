@@ -10,10 +10,34 @@
             padding: 0;
             box-sizing: border-box;
         }
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --text-secondary: #666;
+            --text-muted: #999;
+            --border-color: #ddd;
+            --table-header-bg: #f8f9fa;
+            --table-hover-bg: #f8f9fa;
+            --input-bg: white;
+        }
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eaeaea;
+            --text-secondary: #b8b8b8;
+            --text-muted: #888;
+            --border-color: #0f3460;
+            --table-header-bg: #0f3460;
+            --table-hover-bg: #1a1a2e;
+            --input-bg: #0f3460;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f5f5;
+            background: var(--bg-color);
+            color: var(--text-color);
             padding: 20px;
+            transition: background 0.3s, color 0.3s;
         }
         .container {
             max-width: 800px;
@@ -29,17 +53,18 @@
             text-decoration: underline;
         }
         h1 {
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 2px solid #007bff;
         }
         .add-form {
-            background: white;
+            background: var(--card-bg);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
         .form-row {
             display: flex;
@@ -49,9 +74,11 @@
         input[type="text"] {
             flex: 1;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
+            background: var(--input-bg);
+            color: var(--text-color);
         }
         button {
             padding: 10px 20px;
@@ -66,10 +93,11 @@
             background: #0056b3;
         }
         .location-list {
-            background: white;
+            background: var(--card-bg);
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             overflow: hidden;
+            border: 1px solid var(--border-color);
         }
         table {
             width: 100%;
@@ -78,15 +106,15 @@
         th, td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         th {
-            background: #f8f9fa;
+            background: var(--table-header-bg);
             font-weight: 600;
-            color: #555;
+            color: var(--text-secondary);
         }
         tr:hover {
-            background: #f8f9fa;
+            background: var(--table-hover-bg);
         }
         .usage-count {
             background: #007bff;
@@ -106,7 +134,7 @@
         .empty {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: var(--text-muted);
         }
         .nav-links {
             margin-bottom: 20px;
@@ -119,9 +147,32 @@
         .nav-links a:hover {
             text-decoration: underline;
         }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+
     <div class="container">
         <div class="nav-links">
             <a href="{{ url_for('index') }}">← Back to Accessories</a>
@@ -192,6 +243,26 @@
             .catch(error => {
                 alert('Failed to add location. Please try again.');
             });
+        });
+    </script>
+
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
         });
     </script>
 </body>

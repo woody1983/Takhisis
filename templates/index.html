@@ -10,20 +10,67 @@
             padding: 0;
             box-sizing: border-box;
         }
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --text-secondary: #666;
+            --text-muted: #999;
+            --border-color: #ddd;
+            --table-header-bg: #f8f9fa;
+            --table-hover-bg: #f8f9fa;
+            --input-bg: white;
+            --input-readonly-bg: #f8f9fa;
+        }
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eaeaea;
+            --text-secondary: #b8b8b8;
+            --text-muted: #888;
+            --border-color: #0f3460;
+            --table-header-bg: #0f3460;
+            --table-hover-bg: #1a1a2e;
+            --input-bg: #0f3460;
+            --input-readonly-bg: #1a1a2e;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f5f5;
+            background: var(--bg-color);
+            color: var(--text-color);
             padding: 20px;
+            transition: background 0.3s, color 0.3s;
         }
         .container {
             max-width: 1200px;
             margin: 0 auto;
         }
         h1 {
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 2px solid #007bff;
+        }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            transform: scale(1.1);
         }
         .nav-links {
             margin-bottom: 20px;
@@ -37,11 +84,12 @@
             text-decoration: underline;
         }
         .add-form {
-            background: white;
+            background: var(--card-bg);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
         .form-row {
             display: flex;
@@ -52,9 +100,11 @@
         }
         input[type="text"], textarea, select {
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
+            background: var(--input-bg);
+            color: var(--text-color);
         }
         input[type="text"] {
             flex: 1;
@@ -63,7 +113,7 @@
         select {
             flex: 1;
             min-width: 150px;
-            background: white;
+            background: var(--input-bg);
         }
         textarea {
             width: 100%;
@@ -83,10 +133,11 @@
             background: #0056b3;
         }
         .accessory-list {
-            background: white;
+            background: var(--card-bg);
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             overflow: hidden;
+            border: 1px solid var(--border-color);
         }
         table {
             width: 100%;
@@ -95,22 +146,22 @@
         th, td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         th {
-            background: #f8f9fa;
+            background: var(--table-header-bg);
             font-weight: 600;
-            color: #555;
+            color: var(--text-secondary);
         }
         tr:hover {
-            background: #f8f9fa;
+            background: var(--table-hover-bg);
         }
         .sku {
             font-weight: 600;
             color: #007bff;
         }
         .remark-preview {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 13px;
             max-width: 300px;
             overflow: hidden;
@@ -140,10 +191,10 @@
         .empty {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: var(--text-muted);
         }
         .time {
-            color: #999;
+            color: var(--text-muted);
             font-size: 12px;
         }
         /* Autocomplete styles */
@@ -157,8 +208,8 @@
             top: 100%;
             left: 0;
             right: 0;
-            background: white;
-            border: 1px solid #ddd;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
             border-top: none;
             border-radius: 0 0 4px 4px;
             max-height: 200px;
@@ -170,10 +221,11 @@
         .autocomplete-item {
             padding: 10px;
             cursor: pointer;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
         }
         .autocomplete-item:hover {
-            background: #f8f9fa;
+            background: var(--table-hover-bg);
         }
         .autocomplete-item:last-child {
             border-bottom: none;
@@ -188,16 +240,17 @@
         }
         /* Chart styles */
         .chart-container {
-            background: white;
+            background: var(--card-bg);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-top: 20px;
+            border: 1px solid var(--border-color);
         }
         .chart-title {
             font-size: 18px;
             font-weight: 600;
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 2px solid #007bff;
@@ -210,7 +263,7 @@
         .chart-label {
             width: 150px;
             font-size: 14px;
-            color: #333;
+            color: var(--text-color);
             text-align: right;
             padding-right: 15px;
             white-space: nowrap;
@@ -243,7 +296,7 @@
         .chart-empty {
             text-align: center;
             padding: 40px;
-            color: #999;
+            color: var(--text-muted);
         }
         .chart-bar-clickable {
             cursor: pointer;
@@ -268,12 +321,12 @@
             font-size: 14px;
         }
         .pagination a {
-            background: #f8f9fa;
+            background: var(--table-header-bg);
             color: #007bff;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
         }
         .pagination a:hover {
-            background: #e9ecef;
+            background: var(--table-hover-bg);
         }
         .pagination .current {
             background: #007bff;
@@ -287,14 +340,16 @@
         .pagination-info {
             text-align: center;
             padding: 10px;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
-            background: white;
-            border-top: 1px solid #eee;
+            background: var(--card-bg);
+            border-top: 1px solid var(--border-color);
         }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+    
     <div class="container">
         <h1>Accessory Management</h1>
         
@@ -481,6 +536,24 @@
             .catch(error => {
                 alert('Failed to add. Please try again.');
             });
+        });
+        
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
         });
     </script>
 </body>

@@ -10,10 +10,40 @@
             padding: 0;
             box-sizing: border-box;
         }
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --text-secondary: #666;
+            --text-muted: #999;
+            --border-color: #ddd;
+            --table-header-bg: #f8f9fa;
+            --table-hover-bg: #f8f9fa;
+            --input-bg: white;
+            --input-readonly-bg: #f8f9fa;
+            --remark-bg: #f8f9fa;
+            --remark-border: #007bff;
+        }
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eaeaea;
+            --text-secondary: #b8b8b8;
+            --text-muted: #888;
+            --border-color: #0f3460;
+            --table-header-bg: #0f3460;
+            --table-hover-bg: #1a1a2e;
+            --input-bg: #0f3460;
+            --input-readonly-bg: #1a1a2e;
+            --remark-bg: #0f3460;
+            --remark-border: #007bff;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f5f5f5;
+            background: var(--bg-color);
+            color: var(--text-color);
             padding: 20px;
+            transition: background 0.3s, color 0.3s;
         }
         .container {
             max-width: 800px;
@@ -29,15 +59,16 @@
             text-decoration: underline;
         }
         h1 {
-            color: #333;
+            color: var(--text-color);
             margin-bottom: 20px;
         }
         .card {
-            background: white;
+            background: var(--card-bg);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
         .form-group {
             margin-bottom: 15px;
@@ -46,18 +77,20 @@
             display: block;
             margin-bottom: 5px;
             font-weight: 600;
-            color: #555;
+            color: var(--text-secondary);
         }
         input[type="text"], textarea {
             width: 100%;
             padding: 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
+            background: var(--input-bg);
+            color: var(--text-color);
         }
         input[readonly] {
-            background: #f8f9fa;
-            color: #666;
+            background: var(--input-readonly-bg);
+            color: var(--text-muted);
         }
         textarea {
             min-height: 80px;
@@ -104,22 +137,22 @@
         }
         .remarks-section h3 {
             margin-bottom: 15px;
-            color: #333;
+            color: var(--text-color);
         }
         .remark-item {
-            background: #f8f9fa;
+            background: var(--remark-bg);
             padding: 15px;
             border-radius: 4px;
             margin-bottom: 10px;
-            border-left: 3px solid #007bff;
+            border-left: 3px solid var(--remark-border);
         }
         .remark-time {
-            color: #999;
+            color: var(--text-muted);
             font-size: 12px;
             margin-bottom: 5px;
         }
         .remark-content {
-            color: #333;
+            color: var(--text-color);
             line-height: 1.5;
         }
         .remark-actions {
@@ -133,16 +166,39 @@
         .add-remark {
             margin-top: 20px;
             padding-top: 20px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid var(--border-color);
         }
         .form-actions {
             display: flex;
             gap: 10px;
             margin-top: 15px;
         }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+    
     <div class="container">
         <a href="{{ url_for('index') }}" class="back-link">← Back to List</a>
         
@@ -202,5 +258,26 @@
             {% endif %}
         </div>
     </div>
+    </div>
+    
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+    </script>
 </body>
 </html>

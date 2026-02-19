@@ -194,10 +194,67 @@
         .theme-toggle:hover {
             transform: scale(1.1);
         }
+        /* Toast notification styles */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 250px;
+            max-width: 400px;
+        }
+        .toast.success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+        .toast.error {
+            background: linear-gradient(135deg, #dc3545, #fd7e14);
+        }
+        .toast.info {
+            background: linear-gradient(135deg, #007bff, #6f42c1);
+        }
+        .toast.fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes fadeOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
     <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+    <div class="toast-container" id="toastContainer"></div>
     
     <div class="container">
         <a href="{{ url_for('index') }}" class="back-link">← Back to List</a>
@@ -259,21 +316,38 @@
         </div>
     </div>
     </div>
-    
+
     <script>
+        // Toast notification function
+        function showToast(message, type = 'success', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+
+            const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+            toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
         // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');
         const html = document.documentElement;
-        
+
         // Check for saved theme preference
         const savedTheme = localStorage.getItem('theme') || 'light';
         html.setAttribute('data-theme', savedTheme);
         themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-        
+
         themeToggle.addEventListener('click', function() {
             const currentTheme = html.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            
+
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';

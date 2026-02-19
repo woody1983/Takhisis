@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Order Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --text-secondary: #666;
+            --text-muted: #999;
+            --border-color: #ddd;
+            --table-header-bg: #f8f9fa;
+            --table-hover-bg: #f8f9fa;
+            --input-bg: white;
+        }
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eaeaea;
+            --text-secondary: #b8b8b8;
+            --text-muted: #888;
+            --border-color: #0f3460;
+            --table-header-bg: #0f3460;
+            --table-hover-bg: #1a1a2e;
+            --input-bg: #0f3460;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            color: var(--text-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #007bff;
+        }
+        .stats-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .add-form {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        input[type="text"], input[type="number"], textarea, select {
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+            background: var(--input-bg);
+            color: var(--text-color);
+        }
+        input[type="text"], input[type="number"] {
+            flex: 1;
+            min-width: 150px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 60px;
+            resize: vertical;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 8px 16px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-color);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .filter-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .filter-btn:hover:not(.active) {
+            background: var(--table-hover-bg);
+        }
+        .work-order-list {
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        tr:hover {
+            background: var(--table-hover-bg);
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-pending {
+            background: #ffc107;
+            color: #000;
+        }
+        .status-completed {
+            background: #28a745;
+            color: white;
+        }
+        .status-cancelled {
+            background: #dc3545;
+            color: white;
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-small {
+            padding: 5px 12px;
+            font-size: 12px;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
+        /* Toast notification styles */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 250px;
+            max-width: 400px;
+        }
+        .toast.success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+        }
+        .toast.error {
+            background: linear-gradient(135deg, #dc3545, #fd7e14);
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes fadeOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">🌙</button>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="container">
+        <a href="{{ url_for('index') }}" class="back-link">← Back to Accessories</a>
+        
+        <h1>Work Order Management</h1>
+        
+        <!-- Statistics -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <span class="stat-number">{{ pending_count }}</span>
+                <span class="stat-label">Pending</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ completed_count }}</span>
+                <span class="stat-label">Completed</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-number">{{ cancelled_count }}</span>
+                <span class="stat-label">Cancelled</span>
+            </div>
+        </div>
+        
+        <!-- Add Work Order Form -->
+        <div class="add-form">
+            <h3 style="margin-bottom: 15px;">Create New Work Order</h3>
+            <form id="addWorkOrderForm">
+                <div class="form-row">
+                    <input type="text" name="sku" placeholder="SKU" required>
+                    <input type="text" name="accessory_code" placeholder="Accessory Code" required>
+                    <input type="number" name="quantity" placeholder="Quantity" min="1" required>
+                </div>
+                <div class="form-row">
+                    <input type="text" name="customer_service_name" placeholder="Customer Service Name" style="flex: 1;">
+                </div>
+                <div class="form-row">
+                    <textarea name="remark" placeholder="Remark (Optional)"></textarea>
+                </div>
+                <div class="form-row">
+                    <button type="submit">Create Work Order</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Filter Buttons -->
+        <div class="filter-bar">
+            <a href="{{ url_for('work_orders_page', status='all') }}" class="filter-btn {% if status_filter == 'all' %}active{% endif %}">All</a>
+            <a href="{{ url_for('work_orders_page', status='pending') }}" class="filter-btn {% if status_filter == 'pending' %}active{% endif %}">Pending</a>
+            <a href="{{ url_for('work_orders_page', status='completed') }}" class="filter-btn {% if status_filter == 'completed' %}active{% endif %}">Completed</a>
+            <a href="{{ url_for('work_orders_page', status='cancelled') }}" class="filter-btn {% if status_filter == 'cancelled' %}active{% endif %}">Cancelled</a>
+        </div>
+        
+        <!-- Work Order List -->
+        <div class="work-order-list">
+            {% if work_orders %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>SKU</th>
+                        <th>Accessory Code</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                        <th>Customer Service</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in work_orders %}
+                    <tr>
+                        <td>#{{ order.id }}</td>
+                        <td><strong>{{ order.sku }}</strong></td>
+                        <td>{{ order.accessory_code }}</td>
+                        <td>{{ order.quantity }}</td>
+                        <td>
+                            <span class="status-badge status-{{ order.status }}">{{ order.status }}</span>
+                        </td>
+                        <td>{{ order.customer_service_name or '-' }}</td>
+                        <td>{{ order.created_at }}</td>
+                        <td class="actions">
+                            {% if order.status == 'pending' %}
+                            <button class="btn-small btn-success" onclick="updateStatus({{ order.id }}, 'completed')">Complete</button>
+                            <button class="btn-small btn-danger" onclick="updateStatus({{ order.id }}, 'cancelled')">Cancel</button>
+                            {% elif order.status == 'completed' %}
+                            <button class="btn-small btn-secondary" onclick="updateStatus({{ order.id }}, 'pending')">Reopen</button>
+                            {% elif order.status == 'cancelled' %}
+                            <button class="btn-small btn-secondary" onclick="updateStatus({{ order.id }}, 'pending')">Reopen</button>
+                            {% endif %}
+                            <form action="{{ url_for('delete_work_order', order_id=order.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this work order?');">
+                                <button type="submit" class="btn-small btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No work orders found. Create your first work order above.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Toast notification function
+        function showToast(message, type = 'success', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icon = type === 'success' ? '✓' : '✗';
+            toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+        
+        // Form submission
+        document.getElementById('addWorkOrderForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch('/work_orders/add', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Failed to create work order. Please try again.', 'error');
+            });
+        });
+        
+        // Update status function
+        function updateStatus(orderId, status) {
+            const formData = new FormData();
+            formData.append('status', status);
+            
+            fetch(`/work_orders/update/${orderId}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showToast('Failed to update work order. Please try again.', 'error');
+            });
+        }
+        
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+    </script>
+</body>
+</html>

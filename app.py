@@ -51,6 +51,21 @@ def init_db():
         )
     """)
 
+    # Create work_orders table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS work_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku TEXT NOT NULL,
+            accessory_code TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            customer_service_name TEXT,
+            remark TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -518,6 +533,145 @@ def sku_detail(sku):
         locations=unique_locations,
         total_count=len(accessories),
     )
+
+
+# ==================== Work Order Management Routes ====================
+
+
+@app.route("/work_orders")
+def work_orders_page():
+    """Work order management page"""
+    status_filter = request.args.get("status", "all")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Build query based on filter
+    if status_filter == "all":
+        cursor.execute("""
+            SELECT * FROM work_orders 
+            ORDER BY created_at DESC
+        """)
+    else:
+        cursor.execute("""
+            SELECT * FROM work_orders 
+            WHERE status = ?
+            ORDER BY created_at DESC
+        """, (status_filter,))
+    
+    work_orders = []
+    for row in cursor.fetchall():
+        work_orders.append(dict(row))
+    
+    # Get counts for each status
+    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'pending'")
+    pending_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'completed'")
+    completed_count = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'cancelled'")
+    cancelled_count = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return render_template(
+        "work_orders.html",
+        work_orders=work_orders,
+        status_filter=status_filter,
+        pending_count=pending_count,
+        completed_count=completed_count,
+        cancelled_count=cancelled_count,
+    )
+
+
+@app.route("/work_orders/add", methods=["POST"])
+def add_work_order():
+    """Add new work order"""
+    sku = request.form.get("sku", "").strip()
+    accessory_code = request.form.get("accessory_code", "").strip()
+    quantity = request.form.get("quantity", "").strip()
+    customer_service_name = request.form.get("customer_service_name", "").strip()
+    remark = request.form.get("remark", "").strip()
+    
+    # Validation
+    if not sku or not accessory_code or not quantity:
+        return jsonify({"success": False, "message": "SKU, accessory code, and quantity are required"})
+    
+    try:
+        quantity = int(quantity)
+        if quantity <= 0:
+            return jsonify({"success": False, "message": "Quantity must be greater than 0"})
+    except ValueError:
+        return jsonify({"success": False, "message": "Quantity must be a valid number"})
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT INTO work_orders (sku, accessory_code, quantity, customer_service_name, remark)
+            VALUES (?, ?, ?, ?, ?)
+        """, (sku, accessory_code, quantity, customer_service_name, remark))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Work order created successfully"})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "message": f"Failed to create work order: {str(e)}"})
+
+
+@app.route("/work_orders/update/<int:order_id>", methods=["POST"])
+def update_work_order(order_id):
+    """Update work order status"""
+    status = request.form.get("status", "").strip()
+    
+    if status not in ["pending", "completed", "cancelled"]:
+        return jsonify({"success": False, "message": "Invalid status"})
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        if status == "completed":
+            cursor.execute("""
+                UPDATE work_orders 
+                SET status = ?, completed_at = ?
+                WHERE id = ?
+            """, (status, datetime.now(), order_id))
+        else:
+            cursor.execute("""
+                UPDATE work_orders 
+                SET status = ?, completed_at = NULL
+                WHERE id = ?
+            """, (status, order_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Work order updated successfully"})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "message": f"Failed to update work order: {str(e)}"})
+
+
+@app.route("/work_orders/delete/<int:order_id>", methods=["POST"])
+def delete_work_order(order_id):
+    """Delete work order"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("DELETE FROM work_orders WHERE id = ?", (order_id,))
+        conn.commit()
+        conn.close()
+        
+        return redirect(url_for("work_orders_page"))
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "message": f"Failed to delete work order: {str(e)}"})
 
 
 if __name__ == "__main__":

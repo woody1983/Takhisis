@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-配件登记系统 - 第一版
-功能：管理配件的SKU、库位、备注（多条，按时间降序）
-数据存储：SQLite数据库
+Accessory Management System - Version 1
+Features: Manage SKU, Location, and multiple Remarks (sorted by time, newest first)
+Data Storage: SQLite Database
 """
 
 import sqlite3
@@ -16,11 +16,11 @@ DB_PATH = "accessories.db"
 
 
 def init_db():
-    """初始化数据库"""
+    """Initialize database"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 创建配件表
+    # Create accessories table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS accessories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +30,7 @@ def init_db():
         )
     """)
 
-    # 创建备注表
+    # Create remarks table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS remarks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +46,7 @@ def init_db():
 
 
 def get_db():
-    """获取数据库连接"""
+    """Get database connection"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -54,11 +54,11 @@ def get_db():
 
 @app.route("/")
 def index():
-    """首页 - 显示所有配件"""
+    """Homepage - Display all accessories"""
     conn = get_db()
     cursor = conn.cursor()
 
-    # 获取所有配件及其最新备注
+    # Get all accessories and their latest remarks
     cursor.execute("""
         SELECT a.*, 
                (SELECT content FROM remarks 
@@ -76,7 +76,7 @@ def index():
                 "sku": row["sku"],
                 "location": row["location"],
                 "updated_at": row["updated_at"],
-                "latest_remark": row["latest_remark"] or "无备注",
+                "latest_remark": row["latest_remark"] or "No remarks",
             }
         )
 
@@ -85,18 +85,18 @@ def index():
 
 
 def generate_unique_sku(cursor, sku, location):
-    """生成唯一的SKU，如果重复则添加*1、*2等后缀"""
-    # 检查是否存在相同的SKU和库位组合
+    """Generate unique SKU, append *1, *2, etc. if duplicate"""
+    # Check if SKU + Location combination exists
     cursor.execute(
         "SELECT sku FROM accessories WHERE sku = ? AND location = ?", (sku, location)
     )
 
     if not cursor.fetchone():
-        # 没有重复，直接使用原SKU
+        # No duplicate, use original SKU
         return sku
 
-    # 有重复，需要添加后缀
-    # 查找该SKU在该库位已有的所有变体
+    # Duplicate found, append suffix
+    # Find all existing variants of this SKU at this location
     cursor.execute(
         "SELECT sku FROM accessories WHERE (sku = ? OR sku LIKE ?) AND location = ?",
         (sku, f"{sku}*%", location),
@@ -104,7 +104,7 @@ def generate_unique_sku(cursor, sku, location):
 
     existing_skus = [row[0] for row in cursor.fetchall()]
 
-    # 找到最大的后缀数字
+    # Find the maximum suffix number
     max_num = 0
     for existing_sku in existing_skus:
         if existing_sku == sku:
@@ -116,7 +116,7 @@ def generate_unique_sku(cursor, sku, location):
             except ValueError:
                 pass
 
-    # 生成新的SKU
+    # Generate new SKU
     if max_num == 0:
         return f"{sku}*1"
     else:
@@ -125,22 +125,22 @@ def generate_unique_sku(cursor, sku, location):
 
 @app.route("/add", methods=["POST"])
 def add_accessory():
-    """添加新配件"""
+    """Add new accessory"""
     sku = request.form.get("sku", "").strip()
     location = request.form.get("location", "").strip()
     remark = request.form.get("remark", "").strip()
 
     if not sku or not location:
-        return jsonify({"success": False, "message": "SKU和库位不能为空"})
+        return jsonify({"success": False, "message": "SKU and Location are required"})
 
     conn = get_db()
     cursor = conn.cursor()
 
     try:
-        # 生成唯一的SKU
+        # Generate unique SKU
         final_sku = generate_unique_sku(cursor, sku, location)
 
-        # 插入配件
+        # Insert accessory
         cursor.execute(
             """
             INSERT INTO accessories (sku, location, updated_at)
@@ -151,7 +151,7 @@ def add_accessory():
 
         accessory_id = cursor.lastrowid
 
-        # 如果有备注，插入备注
+        # Insert remark if provided
         if remark:
             cursor.execute(
                 """
@@ -163,34 +163,37 @@ def add_accessory():
 
         conn.commit()
 
-        # 如果SKU被修改了，提示用户
+        # Notify user if SKU was modified
         if final_sku != sku:
             return jsonify(
-                {"success": True, "message": f"添加成功，SKU已自动修改为：{final_sku}"}
+                {
+                    "success": True,
+                    "message": f"Added successfully, SKU auto-modified to: {final_sku}",
+                }
             )
         else:
-            return jsonify({"success": True, "message": "添加成功"})
+            return jsonify({"success": True, "message": "Added successfully"})
     except Exception as e:
-        return jsonify({"success": False, "message": f"添加失败：{str(e)}"})
+        return jsonify({"success": False, "message": f"Failed to add: {str(e)}"})
     finally:
         conn.close()
 
 
 @app.route("/detail/<int:id>")
 def detail(id):
-    """查看配件详情"""
+    """View accessory details"""
     conn = get_db()
     cursor = conn.cursor()
 
-    # 获取配件信息
+    # Get accessory info
     cursor.execute("SELECT * FROM accessories WHERE id = ?", (id,))
     accessory = cursor.fetchone()
 
     if not accessory:
         conn.close()
-        return "配件不存在", 404
+        return "Accessory not found", 404
 
-    # 获取所有备注（按时间降序）
+    # Get all remarks (sorted by time, newest first)
     cursor.execute(
         """
         SELECT * FROM remarks 
@@ -217,14 +220,14 @@ def detail(id):
 
 @app.route("/update/<int:id>", methods=["POST"])
 def update_accessory(id):
-    """更新配件信息"""
+    """Update accessory info"""
     location = request.form.get("location", "").strip()
     new_remark = request.form.get("new_remark", "").strip()
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # 更新库位和修改时间
+    # Update location and timestamp
     cursor.execute(
         """
         UPDATE accessories 
@@ -234,7 +237,7 @@ def update_accessory(id):
         (location, datetime.now(), id),
     )
 
-    # 如果有新备注，添加
+    # Add new remark if provided
     if new_remark:
         cursor.execute(
             """
@@ -252,7 +255,7 @@ def update_accessory(id):
 
 @app.route("/delete/<int:id>", methods=["POST"])
 def delete_accessory(id):
-    """删除配件"""
+    """Delete accessory"""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -265,11 +268,11 @@ def delete_accessory(id):
 
 @app.route("/delete_remark/<int:remark_id>", methods=["POST"])
 def delete_remark(remark_id):
-    """删除单条备注"""
+    """Delete single remark"""
     conn = get_db()
     cursor = conn.cursor()
 
-    # 获取配件ID用于重定向
+    # Get accessory ID for redirect
     cursor.execute("SELECT accessory_id FROM remarks WHERE id = ?", (remark_id,))
     row = cursor.fetchone()
     accessory_id = row["accessory_id"] if row else None
@@ -285,6 +288,6 @@ def delete_remark(remark_id):
 
 if __name__ == "__main__":
     init_db()
-    print("配件登记系统启动...")
-    print("访问地址: http://127.0.0.1:5000")
+    print("Accessory Management System starting...")
+    print("Access URL: http://127.0.0.1:5000")
     app.run(debug=True, host="0.0.0.0", port=5001)

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配件详情 - {{ accessory.sku }}</title>
+    <title>Accessory Details - {{ accessory.sku }}</title>
     <style>
         * {
             margin: 0;
@@ -144,9 +144,9 @@
 </head>
 <body>
     <div class="container">
-        <a href="{{ url_for('index') }}" class="back-link">← 返回列表</a>
+        <a href="{{ url_for('index') }}" class="back-link">← Back to List</a>
         
-        <h1>配件详情</h1>
+        <h1>Accessory Details</h1>
         
         <div class="card">
             <form action="{{ url_for('update_accessory', id=accessory.id) }}" method="post">
@@ -156,34 +156,34 @@
                         <input type="text" value="{{ accessory.sku }}" readonly>
                     </div>
                     <div class="info-item">
-                        <label>库位</label>
+                        <label>Location</label>
                         <input type="text" name="location" value="{{ accessory.location }}" required>
                     </div>
                 </div>
                 
                 <div class="info-row">
                     <div class="info-item">
-                        <label>修改时间</label>
+                        <label>Last Updated</label>
                         <input type="text" value="{{ accessory.updated_at }}" readonly>
                     </div>
                 </div>
                 
                 <div class="add-remark">
-                    <label>添加新备注</label>
-                    <textarea name="new_remark" placeholder="输入新备注..."></textarea>
+                    <label>Add New Remark</label>
+                    <textarea name="new_remark" placeholder="Enter new remark..."></textarea>
                 </div>
                 
                 <div class="form-actions">
-                    <button type="submit">保存修改</button>
+                    <button type="submit">Save Changes</button>
                     <a href="{{ url_for('index') }}">
-                        <button type="button" class="btn-secondary">取消</button>
+                        <button type="button" class="btn-secondary">Cancel</button>
                     </a>
                 </div>
             </form>
         </div>
         
         <div class="card remarks-section">
-            <h3>备注历史（按时间降序）</h3>
+            <h3>Remark History (Newest First)</h3>
             
             {% if remarks %}
                 {% for remark in remarks %}
@@ -191,14 +191,14 @@
                     <div class="remark-time">{{ remark.created_at }}</div>
                     <div class="remark-content">{{ remark.content }}</div>
                     <div class="remark-actions">
-                        <form action="{{ url_for('delete_remark', remark_id=remark.id) }}" method="post" style="display:inline;" onsubmit="return confirm('确定删除此备注？');">
-                            <button type="submit" class="btn-small btn-danger">删除</button>
+                        <form action="{{ url_for('delete_remark', remark_id=remark.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this remark?');">
+                            <button type="submit" class="btn-small btn-danger">Delete</button>
                         </form>
                     </div>
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="no-remarks">暂无备注</div>
+                <div class="no-remarks">No remarks</div>
             {% endif %}
         </div>
     </div>

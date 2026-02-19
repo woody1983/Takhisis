@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配件登记系统</title>
+    <title>Accessory Management System</title>
     <style>
         * {
             margin: 0;
@@ -133,18 +133,18 @@
 </head>
 <body>
     <div class="container">
-        <h1>配件登记系统</h1>
+        <h1>Accessory Management</h1>
         
         <div class="add-form">
-            <h3 style="margin-bottom: 15px;">添加新配件</h3>
+            <h3 style="margin-bottom: 15px;">Add New Accessory</h3>
             <form id="addForm">
                 <div class="form-row">
                     <input type="text" name="sku" placeholder="SKU" required>
-                    <input type="text" name="location" placeholder="库位" required>
-                    <button type="submit">添加</button>
+                    <input type="text" name="location" placeholder="Location" required>
+                    <button type="submit">Add</button>
                 </div>
                 <div class="form-row">
-                    <textarea name="remark" placeholder="备注（可选）"></textarea>
+                    <textarea name="remark" placeholder="Remarks (Optional)"></textarea>
                 </div>
             </form>
         </div>
@@ -155,10 +155,10 @@
                 <thead>
                     <tr>
                         <th>SKU</th>
-                        <th>库位</th>
-                        <th>最新备注</th>
-                        <th>修改时间</th>
-                        <th>操作</th>
+                        <th>Location</th>
+                        <th>Latest Remark</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -170,10 +170,10 @@
                         <td class="time">{{ item.updated_at }}</td>
                         <td class="actions">
                             <a href="{{ url_for('detail', id=item.id) }}">
-                                <button class="btn-small btn-edit">详情</button>
+                                <button class="btn-small btn-edit">Details</button>
                             </a>
-                            <form action="{{ url_for('delete_accessory', id=item.id) }}" method="post" style="display:inline;" onsubmit="return confirm('确定删除此配件？');">
-                                <button type="submit" class="btn-small btn-delete">删除</button>
+                            <form action="{{ url_for('delete_accessory', id=item.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Delete this accessory?');">
+                                <button type="submit" class="btn-small btn-delete">Delete</button>
                             </form>
                         </td>
                     </tr>
@@ -181,7 +181,7 @@
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">暂无配件数据</div>
+            <div class="empty">No accessories found</div>
             {% endif %}
         </div>
     </div>
@@ -205,7 +205,7 @@
                 }
             })
             .catch(error => {
-                alert('添加失败，请重试');
+                alert('Failed to add. Please try again.');
             });
         });
     </script>

@@ -24,7 +24,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS accessories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sku TEXT UNIQUE NOT NULL,
+            sku TEXT NOT NULL,
             location TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -84,6 +84,45 @@ def index():
     return render_template("index.html", accessories=accessories)
 
 
+def generate_unique_sku(cursor, sku, location):
+    """生成唯一的SKU，如果重复则添加*1、*2等后缀"""
+    # 检查是否存在相同的SKU和库位组合
+    cursor.execute(
+        "SELECT sku FROM accessories WHERE sku = ? AND location = ?", (sku, location)
+    )
+
+    if not cursor.fetchone():
+        # 没有重复，直接使用原SKU
+        return sku
+
+    # 有重复，需要添加后缀
+    # 查找该SKU在该库位已有的所有变体
+    cursor.execute(
+        "SELECT sku FROM accessories WHERE (sku = ? OR sku LIKE ?) AND location = ?",
+        (sku, f"{sku}*%", location),
+    )
+
+    existing_skus = [row[0] for row in cursor.fetchall()]
+
+    # 找到最大的后缀数字
+    max_num = 0
+    for existing_sku in existing_skus:
+        if existing_sku == sku:
+            max_num = max(max_num, 1)
+        elif "*" in existing_sku:
+            try:
+                num = int(existing_sku.split("*")[-1])
+                max_num = max(max_num, num + 1)
+            except ValueError:
+                pass
+
+    # 生成新的SKU
+    if max_num == 0:
+        return f"{sku}*1"
+    else:
+        return f"{sku}*{max_num}"
+
+
 @app.route("/add", methods=["POST"])
 def add_accessory():
     """添加新配件"""
@@ -98,13 +137,16 @@ def add_accessory():
     cursor = conn.cursor()
 
     try:
+        # 生成唯一的SKU
+        final_sku = generate_unique_sku(cursor, sku, location)
+
         # 插入配件
         cursor.execute(
             """
             INSERT INTO accessories (sku, location, updated_at)
             VALUES (?, ?, ?)
         """,
-            (sku, location, datetime.now()),
+            (final_sku, location, datetime.now()),
         )
 
         accessory_id = cursor.lastrowid
@@ -120,9 +162,16 @@ def add_accessory():
             )
 
         conn.commit()
-        return jsonify({"success": True, "message": "添加成功"})
-    except sqlite3.IntegrityError:
-        return jsonify({"success": False, "message": "SKU已存在"})
+
+        # 如果SKU被修改了，提示用户
+        if final_sku != sku:
+            return jsonify(
+                {"success": True, "message": f"添加成功，SKU已自动修改为：{final_sku}"}
+            )
+        else:
+            return jsonify({"success": True, "message": "添加成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"添加失败：{str(e)}"})
     finally:
         conn.close()
 

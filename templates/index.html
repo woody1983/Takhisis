@@ -25,6 +25,17 @@
             padding-bottom: 10px;
             border-bottom: 2px solid #007bff;
         }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
         .add-form {
             background: white;
             padding: 20px;
@@ -37,8 +48,9 @@
             gap: 10px;
             margin-bottom: 10px;
             flex-wrap: wrap;
+            position: relative;
         }
-        input[type="text"], textarea {
+        input[type="text"], textarea, select {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -47,6 +59,11 @@
         input[type="text"] {
             flex: 1;
             min-width: 150px;
+        }
+        select {
+            flex: 1;
+            min-width: 150px;
+            background: white;
         }
         textarea {
             width: 100%;
@@ -129,18 +146,176 @@
             color: #999;
             font-size: 12px;
         }
+        /* Autocomplete styles */
+        .autocomplete-container {
+            position: relative;
+            flex: 1;
+            min-width: 150px;
+        }
+        .autocomplete-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .autocomplete-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .autocomplete-item:hover {
+            background: #f8f9fa;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .usage-badge {
+            background: #28a745;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        /* Chart styles */
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #007bff;
+        }
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .chart-label {
+            width: 150px;
+            font-size: 14px;
+            color: #333;
+            text-align: right;
+            padding-right: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .chart-bar-container {
+            flex: 1;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .chart-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+        }
+        .chart-value {
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .chart-empty {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .chart-bar-clickable {
+            cursor: pointer;
+        }
+        .chart-bar-clickable:hover .chart-bar-fill {
+            background: linear-gradient(90deg, #0056b3, #004494);
+        }
+        /* Pagination styles */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .pagination a {
+            background: #f8f9fa;
+            color: #007bff;
+            border: 1px solid #ddd;
+        }
+        .pagination a:hover {
+            background: #e9ecef;
+        }
+        .pagination .current {
+            background: #007bff;
+            color: white;
+            border: 1px solid #007bff;
+        }
+        .pagination .disabled {
+            color: #999;
+            cursor: not-allowed;
+        }
+        .pagination-info {
+            text-align: center;
+            padding: 10px;
+            color: #666;
+            font-size: 14px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Accessory Management</h1>
         
+        <div class="nav-links">
+            <a href="{{ url_for('locations_page') }}">Manage Locations</a>
+        </div>
+        
         <div class="add-form">
             <h3 style="margin-bottom: 15px;">Add New Accessory</h3>
             <form id="addForm">
                 <div class="form-row">
-                    <input type="text" name="sku" placeholder="SKU" required>
-                    <input type="text" name="location" placeholder="Location" required>
+                    <div class="autocomplete-container">
+                        <input type="text" name="sku" id="skuInput" placeholder="SKU" required autocomplete="off">
+                        <div class="autocomplete-list" id="skuAutocomplete"></div>
+                    </div>
+                    <select name="location" id="locationSelect" required>
+                        <option value="">Select Location</option>
+                        {% for location in locations %}
+                        <option value="{{ location.name }}">{{ location.name }} ({{ location.usage_count }} uses)</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit">Add</button>
                 </div>
                 <div class="form-row">
@@ -180,13 +355,112 @@
                     {% endfor %}
                 </tbody>
             </table>
+            
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="pagination-info">
+                Showing {{ (page - 1) * 7 + 1 }} - {{ [page * 7, total_items] | min }} of {{ total_items }} items
+            </div>
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="{{ url_for('index', page=page-1) }}">← Previous</a>
+                {% else %}
+                <span class="disabled">← Previous</span>
+                {% endif %}
+                
+                {% if start_page > 1 %}
+                <a href="{{ url_for('index', page=1) }}">1</a>
+                {% if start_page > 2 %}<span>...</span>{% endif %}
+                {% endif %}
+                
+                {% for p in range(start_page, end_page + 1) %}
+                {% if p == page %}
+                <span class="current">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('index', page=p) }}">{{ p }}</a>
+                {% endif %}
+                {% endfor %}
+                
+                {% if end_page < total_pages %}
+                {% if end_page < total_pages - 1 %}<span>...</span>{% endif %}
+                <a href="{{ url_for('index', page=total_pages) }}">{{ total_pages }}</a>
+                {% endif %}
+                
+                {% if page < total_pages %}
+                <a href="{{ url_for('index', page=page+1) }}">Next →</a>
+                {% else %}
+                <span class="disabled">Next →</span>
+                {% endif %}
+            </div>
+            {% endif %}
             {% else %}
             <div class="empty">No accessories found</div>
+            {% endif %}
+        </div>
+        
+        <!-- SKU Statistics Chart -->
+        <div class="chart-container">
+            <div class="chart-title">SKU Statistics (Grouped by Base SKU)</div>
+            {% if sku_stats %}
+                {% set max_count = sku_stats[0][1] %}
+                {% for sku, count in sku_stats %}
+                <div class="chart-bar chart-bar-clickable" onclick="window.location.href='{{ url_for('sku_detail', sku=sku) }}'">
+                    <div class="chart-label" title="{{ sku }}">{{ sku }}</div>
+                    <div class="chart-bar-container">
+                        <div class="chart-bar-fill" style="width: {{ (count / max_count * 100) | int }}%;">
+                            <span class="chart-value">{{ count }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="chart-empty">No SKU statistics available</div>
             {% endif %}
         </div>
     </div>
     
     <script>
+        // SKU autocomplete functionality
+        const skuInput = document.getElementById('skuInput');
+        const skuAutocomplete = document.getElementById('skuAutocomplete');
+        const skus = {{ skus | tojson }};
+        
+        skuInput.addEventListener('input', function() {
+            const value = this.value.toLowerCase();
+            skuAutocomplete.innerHTML = '';
+            
+            if (value.length === 0) {
+                skuAutocomplete.style.display = 'none';
+                return;
+            }
+            
+            const matches = skus.filter(sku => sku.toLowerCase().includes(value));
+            
+            if (matches.length > 0) {
+                matches.forEach(sku => {
+                    const div = document.createElement('div');
+                    div.className = 'autocomplete-item';
+                    div.textContent = sku;
+                    div.addEventListener('click', function() {
+                        skuInput.value = sku;
+                        skuAutocomplete.style.display = 'none';
+                    });
+                    skuAutocomplete.appendChild(div);
+                });
+                skuAutocomplete.style.display = 'block';
+            } else {
+                skuAutocomplete.style.display = 'none';
+            }
+        });
+        
+        // Hide autocomplete when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!skuInput.contains(e.target) && !skuAutocomplete.contains(e.target)) {
+                skuAutocomplete.style.display = 'none';
+            }
+        });
+        
+        // Form submission
         document.getElementById('addForm').addEventListener('submit', function(e) {
             e.preventDefault();
             

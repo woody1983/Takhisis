@@ -26,16 +26,17 @@ def generate_work_order_id():
     """Generate a random 6-digit work order ID"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     while True:
         # Generate random 6-digit number (100000-999999)
         new_id = random.randint(100000, 999999)
-        
+
         # Check if ID already exists
         cursor.execute("SELECT id FROM work_orders WHERE id = ?", (new_id,))
         if cursor.fetchone() is None:
             conn.close()
             return new_id
+
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
 CORS(app)  # Enable CORS for React frontend
@@ -541,33 +542,91 @@ def api_add_work_order():
     cursor = conn.cursor()
 
     try:
-        # Check if SKU exists in inventory
+        # Check if SKU exists in inventory and accessory_code is available
         cursor.execute(
-            "SELECT id, location FROM accessories WHERE sku = ? ORDER BY updated_at DESC LIMIT 1",
-            (sku,)
+            "SELECT id, location FROM accessories WHERE sku = ? ORDER BY updated_at DESC",
+            (sku,),
         )
-        inventory_match = cursor.fetchone()
+        inventory_matches = cursor.fetchall()
 
-        if inventory_match:
-            # Match found - use inventory location
-            match_status = "matched"
-            location = inventory_match["location"]
-        else:
-            # No match - needs new one
-            match_status = "new_one"
-            location = None
-        
+        matched_accessory = None
+        match_status = "new_one"
+        location = None
+
+        if inventory_matches:
+            # Check each accessory to see if accessory_code is available
+            for accessory in inventory_matches:
+                accessory_id = accessory["id"]
+
+                # Get all remarks for this accessory
+                cursor.execute(
+                    "SELECT content FROM remarks WHERE accessory_id = ? ORDER BY created_at DESC",
+                    (accessory_id,),
+                )
+                remarks = cursor.fetchall()
+
+                # Check if accessory_code has been removed
+                is_removed = False
+                import re
+
+                # Normalize accessory_code by removing spaces for comparison
+                # e.g., "part A" -> "partA", "Part 1" -> "Part1"
+                normalized_code = accessory_code.replace(" ", "").lower()
+
+                for remark_row in remarks:
+                    content = remark_row["content"]
+                    if content:
+                        # Find all "remove <something>" patterns in the content
+                        # Pattern matches: "remove xxx", "remove xxx -", "remove xxx\n", or "remove xxx at end"
+                        # The (.*?) captures everything after remove until end of line or " -"
+                        remove_patterns = re.findall(
+                            r"remove\s+(.*?)(?:\s+-|\s*$|\s*\n)", content, re.IGNORECASE
+                        )
+
+                        for removed_item in remove_patterns:
+                            # Normalize the removed item (remove spaces and lowercase)
+                            normalized_removed = removed_item.replace(" ", "").lower()
+
+                            # Check if it matches our accessory_code
+                            if normalized_removed == normalized_code:
+                                is_removed = True
+                                break
+
+                        if is_removed:
+                            break
+
+                if not is_removed:
+                    # Found an available accessory
+                    matched_accessory = accessory
+                    match_status = "matched"
+                    location = accessory["location"]
+                    break
+
+            if not matched_accessory:
+                # All accessories have this accessory_code removed
+                match_status = "new_one"
+                location = None
+
         message = "Work order created successfully"
 
         # Generate random 6-digit ID
         order_id = generate_work_order_id()
-        
+
         cursor.execute(
             """
             INSERT INTO work_orders (id, sku, accessory_code, quantity, match_status, location, customer_service_name, remark)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            (order_id, sku, accessory_code, quantity, match_status, location, customer_service_name, remark),
+            (
+                order_id,
+                sku,
+                accessory_code,
+                quantity,
+                match_status,
+                location,
+                customer_service_name,
+                remark,
+            ),
         )
 
         conn.commit()
@@ -577,7 +636,7 @@ def api_add_work_order():
             "success": True,
             "message": message,
             "id": order_id,
-            "match_status": match_status
+            "match_status": match_status,
         }
 
         if location:
@@ -602,7 +661,15 @@ def api_update_work_order(id):
     cursor = conn.cursor()
 
     try:
-        if status == "completed":
+        # Get work order details first
+        cursor.execute(
+            "SELECT sku, accessory_code, location, match_status FROM work_orders WHERE id = ?",
+            (id,),
+        )
+        work_order = cursor.fetchone()
+
+        if status == "completed" and work_order:
+            # Update work order status
             cursor.execute(
                 """
                 UPDATE work_orders 
@@ -611,6 +678,26 @@ def api_update_work_order(id):
             """,
                 (status, datetime.now(), id),
             )
+
+            # If matched to an accessory, add remove mark to the accessory's remarks
+            if work_order["match_status"] == "matched" and work_order["location"]:
+                # Find the accessory that was matched
+                cursor.execute(
+                    "SELECT id FROM accessories WHERE sku = ? AND location = ?",
+                    (work_order["sku"], work_order["location"]),
+                )
+                accessory = cursor.fetchone()
+
+                if accessory:
+                    # Add remove mark to remarks
+                    remove_mark = f"remove {work_order['accessory_code']} - WO#{id} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    cursor.execute(
+                        """
+                        INSERT INTO remarks (accessory_id, content, created_at)
+                        VALUES (?, ?, ?)
+                    """,
+                        (accessory["id"], remove_mark, datetime.now()),
+                    )
         else:
             cursor.execute(
                 """
@@ -671,9 +758,6 @@ def api_get_work_order(id):
 
         conn.close()
         return jsonify(order_dict)
-    except Exception as e:
-        conn.close()
-        return jsonify({"success": False, "message": str(e)}), 500
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -945,28 +1029,40 @@ def work_order_detail(id):
 
     # Get accessory details if matched
     accessory_details = None
+    accessory_remarks = []
     if work_order.get("match_status") == "matched":
+        # Get accessory info
         cursor.execute(
             """
-            SELECT a.*, r.content as latest_remark 
+            SELECT a.*
             FROM accessories a
-            LEFT JOIN remarks r ON a.id = r.accessory_id
-            WHERE a.sku = ?
-            ORDER BY r.created_at DESC
-            LIMIT 1
+            WHERE a.sku = ? AND a.location = ?
         """,
-            (work_order["sku"],),
+            (work_order["sku"], work_order["location"]),
         )
         accessory = cursor.fetchone()
         if accessory:
             accessory_details = dict(accessory)
+
+            # Get all remarks for this accessory, ordered by time desc
+            cursor.execute(
+                """
+                SELECT id, content, created_at
+                FROM remarks
+                WHERE accessory_id = ?
+                ORDER BY created_at DESC
+            """,
+                (accessory["id"],),
+            )
+            accessory_remarks = [dict(row) for row in cursor.fetchall()]
 
     conn.close()
 
     return render_template(
         "work_order_detail.html",
         work_order=work_order,
-        accessory_details=accessory_details
+        accessory_details=accessory_details,
+        accessory_remarks=accessory_remarks,
     )
 
 

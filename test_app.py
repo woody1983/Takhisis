@@ -689,17 +689,20 @@ class TestWorkOrderSystem:
 
     def test_get_work_orders_with_data(self, client):
         """Test getting work orders with existing data"""
-        # Create some work orders
-        client.post(
+        # Create some work orders and get their IDs
+        response1 = client.post(
             "/api/work-orders",
             json={"sku": "SKU-1", "accessory_code": "ACC-1", "quantity": 1},
             content_type="application/json",
         )
-        client.post(
+        assert response1.status_code == 200
+
+        response2 = client.post(
             "/api/work-orders",
             json={"sku": "SKU-2", "accessory_code": "ACC-2", "quantity": 2},
             content_type="application/json",
         )
+        assert response2.status_code == 200
 
         response = client.get("/api/work-orders")
         assert response.status_code == 200
@@ -710,20 +713,28 @@ class TestWorkOrderSystem:
     def test_get_work_orders_filtered_by_status(self, client):
         """Test filtering work orders by status"""
         # Create work orders
-        client.post(
+        response1 = client.post(
             "/api/work-orders",
             json={"sku": "SKU-1", "accessory_code": "ACC-1", "quantity": 1},
             content_type="application/json",
         )
-        client.post(
+        assert response1.status_code == 200
+
+        response2 = client.post(
             "/api/work-orders",
             json={"sku": "SKU-2", "accessory_code": "ACC-2", "quantity": 2},
             content_type="application/json",
         )
+        assert response2.status_code == 200
+
+        # Get the first work order ID
+        response = client.get("/api/work-orders")
+        data = response.get_json()
+        first_order_id = data["work_orders"][0]["id"]
 
         # Complete one
         client.put(
-            "/api/work-orders/1",
+            f"/api/work-orders/{first_order_id}",
             json={"status": "completed"},
             content_type="application/json",
         )
@@ -738,15 +749,21 @@ class TestWorkOrderSystem:
     def test_update_work_order_status(self, client):
         """Test updating work order status"""
         # Create work order
-        client.post(
+        response = client.post(
             "/api/work-orders",
             json={"sku": "TEST", "accessory_code": "ACC", "quantity": 1},
             content_type="application/json",
         )
+        assert response.status_code == 200
+
+        # Get the work order ID
+        response = client.get("/api/work-orders")
+        data = response.get_json()
+        order_id = data["work_orders"][0]["id"]
 
         # Update to completed
         response = client.put(
-            "/api/work-orders/1",
+            f"/api/work-orders/{order_id}",
             json={"status": "completed"},
             content_type="application/json",
         )
@@ -757,8 +774,12 @@ class TestWorkOrderSystem:
         # Verify
         response = client.get("/api/work-orders")
         data = response.get_json()
-        assert data["work_orders"][0]["status"] == "completed"
-        assert data["work_orders"][0]["completed_at"] is not None
+        # Find the completed order
+        completed_orders = [
+            w for w in data["work_orders"] if w["status"] == "completed"
+        ]
+        assert len(completed_orders) == 1
+        assert completed_orders[0]["completed_at"] is not None
 
     def test_update_work_order_invalid_status(self, client):
         """Test updating work order with invalid status"""
@@ -802,6 +823,169 @@ class TestWorkOrderSystem:
         response = client.get("/work-orders")
         assert response.status_code == 200
         assert b"Work Order Management" in response.data
+
+    def test_work_order_status_sorting(self, client):
+        """Test work orders are sorted by status (pending first)"""
+        # Create work orders with different statuses
+        # Order of creation: COMPLETED, PENDING, CANCELLED
+        client.post(
+            "/api/work-orders",
+            json={"sku": "COMPLETED-1", "accessory_code": "ACC-1", "quantity": 1},
+            content_type="application/json",
+        )
+        client.post(
+            "/api/work-orders",
+            json={"sku": "PENDING-1", "accessory_code": "ACC-2", "quantity": 1},
+            content_type="application/json",
+        )
+        client.post(
+            "/api/work-orders",
+            json={"sku": "CANCELLED-1", "accessory_code": "ACC-3", "quantity": 1},
+            content_type="application/json",
+        )
+
+        # Get all work orders to find their IDs
+        response = client.get("/api/work-orders")
+        data = response.get_json()
+
+        # Find IDs by SKU
+        completed_id = None
+        cancelled_id = None
+        for wo in data["work_orders"]:
+            if wo["sku"] == "COMPLETED-1":
+                completed_id = wo["id"]
+            elif wo["sku"] == "CANCELLED-1":
+                cancelled_id = wo["id"]
+
+        # Complete the first one
+        client.put(
+            f"/api/work-orders/{completed_id}",
+            json={"status": "completed"},
+            content_type="application/json",
+        )
+
+        # Cancel the third one
+        client.put(
+            f"/api/work-orders/{cancelled_id}",
+            json={"status": "cancelled"},
+            content_type="application/json",
+        )
+
+        # Get work orders again
+        response = client.get("/api/work-orders")
+        data = response.get_json()
+
+        # Check order: pending should be first
+        assert data["work_orders"][0]["status"] == "pending"
+        assert data["work_orders"][0]["sku"] == "PENDING-1"
+
+    def test_work_order_pagination(self, client):
+        """Test work order pagination"""
+        # Create 15 work orders
+        for i in range(15):
+            response = client.post(
+                "/api/work-orders",
+                json={
+                    "sku": f"SKU-{i}",
+                    "accessory_code": f"ACC-{i}",
+                    "quantity": 1,
+                },
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+
+        # Get page 1 (default 10 per page)
+        response = client.get("/api/work-orders?page=1&per_page=10")
+        assert response.status_code == 200
+        data = response.get_json()
+
+        assert len(data["work_orders"]) == 10
+        assert data["pagination"]["page"] == 1
+        assert data["pagination"]["per_page"] == 10
+        assert data["pagination"]["total"] == 15
+        assert data["pagination"]["total_pages"] == 2
+
+        # Get page 2
+        response = client.get("/api/work-orders?page=2&per_page=10")
+        assert response.status_code == 200
+        data = response.get_json()
+
+        assert len(data["work_orders"]) == 5
+        assert data["pagination"]["page"] == 2
+
+    def test_work_order_pagination_with_status_filter(self, client):
+        """Test pagination with status filter"""
+        # Create work orders with different statuses
+        for i in range(5):
+            response = client.post(
+                "/api/work-orders",
+                json={
+                    "sku": f"PENDING-{i}",
+                    "accessory_code": f"ACC-{i}",
+                    "quantity": 1,
+                },
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+
+        for i in range(3):
+            response = client.post(
+                "/api/work-orders",
+                json={
+                    "sku": f"COMPLETED-{i}",
+                    "accessory_code": f"COMP-{i}",
+                    "quantity": 1,
+                },
+                content_type="application/json",
+            )
+            assert response.status_code == 200
+
+        # Get all work orders to find IDs of completed ones
+        response = client.get("/api/work-orders")
+        data = response.get_json()
+
+        # Mark some as completed
+        completed_count = 0
+        for wo in data["work_orders"]:
+            if wo["sku"].startswith("COMPLETED-") and completed_count < 3:
+                client.put(
+                    f"/api/work-orders/{wo['id']}",
+                    json={"status": "completed"},
+                    content_type="application/json",
+                )
+                completed_count += 1
+
+        # Get only pending with pagination
+        response = client.get("/api/work-orders?status=pending&page=1&per_page=3")
+        assert response.status_code == 200
+        data = response.get_json()
+
+        assert len(data["work_orders"]) == 3
+        assert all(w["status"] == "pending" for w in data["work_orders"])
+        assert data["pagination"]["total"] == 5
+
+    def test_work_orders_page_with_pagination(self, client):
+        """Test work orders page renders with pagination"""
+        # Create 12 work orders
+        for i in range(12):
+            client.post(
+                "/api/work-orders",
+                json={
+                    "sku": f"SKU-{i}",
+                    "accessory_code": f"ACC-{i}",
+                    "quantity": 1,
+                },
+                content_type="application/json",
+            )
+
+        # Get page 1
+        response = client.get("/work-orders")
+        assert response.status_code == 200
+        assert b"pagination" in response.data or b"Showing" in response.data
+
+        # Get page 2
+        response = client.get("/work-orders/page/2")
+        assert response.status_code == 200
 
 
 class TestIntegration:

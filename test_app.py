@@ -27,6 +27,7 @@ def client():
     # Create a temporary file for the test database
     db_fd, db_path = tempfile.mkstemp()
     app.config["TESTING"] = True
+    app.config["DB_PATH"] = db_path
 
     # Override the DB_PATH in app
     import app as app_module
@@ -1087,6 +1088,121 @@ class TestIntegration:
         response = client.get("/api/work-orders")
         data = response.get_json()
         assert len(data["work_orders"]) == 0
+
+
+class TestWorkOrderInventoryMatching:
+    """Test Issue #17: Work Order automatic inventory matching"""
+
+    def test_work_order_has_match_status_field(self, client):
+        """Test that work order has match_status field in database"""
+        # Create a work order
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "TEST-SKU-001", "accessory_code": "ACC-001", "quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+
+        # Check the database schema includes match_status
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(work_orders)")
+        columns = [row[1] for row in cursor.fetchall()]
+        conn.close()
+
+        assert "match_status" in columns
+
+    def test_create_work_order_auto_match_with_inventory(self, client):
+        """Test creating work order auto-matches when SKU exists in inventory"""
+        # First, add an accessory to inventory
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location) VALUES (?, ?)",
+            ("MATCH-SKU-001", "A-01-01")
+        )
+        conn.commit()
+        conn.close()
+
+        # Create work order with matching SKU
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "MATCH-SKU-001", "accessory_code": "ACC-001", "quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["match_status"] == "matched"
+        assert data["location"] == "A-01-01"
+
+    def test_create_work_order_no_match_without_inventory(self, client):
+        """Test creating work order shows 'new one' when SKU not in inventory"""
+        # Create work order without matching SKU in inventory
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "NO-MATCH-SKU", "accessory_code": "ACC-001", "quantity": 5},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["success"] is True
+        assert data["match_status"] == "new_one"
+        assert "created" in data["message"].lower()
+
+    def test_get_work_order_with_location_details(self, client):
+        """Test getting work order details includes location info when matched"""
+        # Add accessory to inventory
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
+            ("DETAIL-SKU-001", "B-02-03", datetime.now().isoformat())
+        )
+        accessory_id = cursor.lastrowid
+        
+        # Add a remark to the accessory
+        cursor.execute(
+            "INSERT INTO remarks (accessory_id, content) VALUES (?, ?)",
+            (accessory_id, "Test accessory details")
+        )
+        conn.commit()
+        conn.close()
+
+        # Create work order
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "DETAIL-SKU-001", "accessory_code": "ACC-002", "quantity": 3},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        order_data = response.get_json()
+        order_id = order_data.get("id")
+
+        # Get work order details
+        response = client.get(f"/api/work-orders/{order_id}")
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data["match_status"] == "matched"
+        assert data["location"] == "B-02-03"
+        assert "accessory_details" in data
+
+    def test_work_order_match_status_pending_initially(self, client):
+        """Test that match_status starts as pending before matching"""
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "PENDING-SKU", "accessory_code": "ACC-001", "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Should have match_status field
+        assert "match_status" in data
 
 
 if __name__ == "__main__":

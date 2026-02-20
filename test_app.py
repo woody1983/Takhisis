@@ -1124,12 +1124,12 @@ class TestWorkOrderInventoryMatching:
         )
         assert response.status_code == 200
         data = response.get_json()
-        
+
         # Check ID is a 6-digit number
         order_id = data["id"]
         assert isinstance(order_id, int)
         assert 100000 <= order_id <= 999999
-        
+
         # Create another work order and verify ID is different
         response2 = client.post(
             "/api/work-orders",
@@ -1138,7 +1138,7 @@ class TestWorkOrderInventoryMatching:
         )
         data2 = response2.get_json()
         order_id2 = data2["id"]
-        
+
         # IDs should be different
         assert order_id != order_id2
 
@@ -1150,7 +1150,7 @@ class TestWorkOrderInventoryMatching:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO accessories (sku, location) VALUES (?, ?)",
-            ("MATCH-SKU-001", "A-01-01")
+            ("MATCH-SKU-001", "A-01-01"),
         )
         conn.commit()
         conn.close()
@@ -1189,14 +1189,14 @@ class TestWorkOrderInventoryMatching:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
-            ("DETAIL-SKU-001", "B-02-03", datetime.now().isoformat())
+            ("DETAIL-SKU-001", "B-02-03", datetime.now().isoformat()),
         )
         accessory_id = cursor.lastrowid
-        
+
         # Add a remark to the accessory
         cursor.execute(
             "INSERT INTO remarks (accessory_id, content) VALUES (?, ?)",
-            (accessory_id, "Test accessory details")
+            (accessory_id, "Test accessory details"),
         )
         conn.commit()
         conn.close()
@@ -1215,7 +1215,7 @@ class TestWorkOrderInventoryMatching:
         response = client.get(f"/api/work-orders/{order_id}")
         assert response.status_code == 200
         data = response.get_json()
-        
+
         assert data["match_status"] == "matched"
         assert data["location"] == "B-02-03"
         assert "accessory_details" in data
@@ -1229,9 +1229,166 @@ class TestWorkOrderInventoryMatching:
         )
         assert response.status_code == 200
         data = response.get_json()
-        
+
         # Should have match_status field
         assert "match_status" in data
+
+    def test_create_work_order_with_removed_accessory_code(self, client):
+        """Test that work order is marked as new_one when accessory_code has been removed"""
+        # Add accessory to inventory
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
+            ("REMOVED-SKU-001", "A-01-01", datetime.now().isoformat()),
+        )
+        accessory_id = cursor.lastrowid
+
+        # Add remove mark for partA
+        cursor.execute(
+            "INSERT INTO remarks (accessory_id, content, created_at) VALUES (?, ?, ?)",
+            (
+                accessory_id,
+                "remove part A - WO#123456 - 2026-02-19 10:00:00",
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create work order for partA - should be new_one
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "REMOVED-SKU-001", "accessory_code": "partA", "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["match_status"] == "new_one"
+
+    def test_create_work_order_with_spaced_accessory_code(self, client):
+        """Test matching with spaced accessory_code format (e.g., 'part A' vs 'partA')"""
+        # Add accessory to inventory
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
+            ("SPACED-SKU-001", "B-02-02", datetime.now().isoformat()),
+        )
+        accessory_id = cursor.lastrowid
+
+        # Add remove mark with space: "remove part 1"
+        cursor.execute(
+            "INSERT INTO remarks (accessory_id, content, created_at) VALUES (?, ?, ?)",
+            (
+                accessory_id,
+                "remove part 1 - WO#111111 - 2026-02-19 11:00:00",
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create work order for "part1" (no space) - should match "remove part 1" (with space)
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "SPACED-SKU-001", "accessory_code": "part1", "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        # Should be new_one because "part1" matches "part 1" when normalized
+        assert data["match_status"] == "new_one"
+
+    def test_complete_work_order_adds_remove_mark(self, client):
+        """Test that completing a work order adds remove mark to accessory"""
+        # Add accessory to inventory
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
+            ("COMPLETE-SKU-001", "C-03-03", datetime.now().isoformat()),
+        )
+        accessory_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        # Create work order
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "COMPLETE-SKU-001", "accessory_code": "partX", "quantity": 2},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        order_data = response.get_json()
+        order_id = order_data.get("id")
+        assert order_data["match_status"] == "matched"
+
+        # Complete the work order
+        response = client.put(
+            f"/api/work-orders/{order_id}",
+            json={"status": "completed"},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+
+        # Verify remove mark was added
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM remarks WHERE accessory_id = ? ORDER BY created_at DESC LIMIT 1",
+            (accessory_id,),
+        )
+        remark = cursor.fetchone()
+        conn.close()
+
+        assert remark is not None
+        assert "partX" in remark[0]
+        assert f"WO#{order_id}" in remark[0]
+
+    def test_work_order_detail_page_shows_all_remarks(self, client):
+        """Test that work order detail page shows all accessory remarks"""
+        # Add accessory with multiple remarks
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location, updated_at) VALUES (?, ?, ?)",
+            ("MULTI-REMARK-SKU", "D-04-04", datetime.now().isoformat()),
+        )
+        accessory_id = cursor.lastrowid
+
+        # Add multiple remarks
+        cursor.execute(
+            "INSERT INTO remarks (accessory_id, content, created_at) VALUES (?, ?, ?)",
+            (accessory_id, "First remark", datetime.now().isoformat()),
+        )
+        cursor.execute(
+            "INSERT INTO remarks (accessory_id, content, created_at) VALUES (?, ?, ?)",
+            (accessory_id, "Second remark", datetime.now().isoformat()),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create work order
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "MULTI-REMARK-SKU", "accessory_code": "partY", "quantity": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        order_data = response.get_json()
+
+        # Access work order detail page
+        response = client.get(f"/work-orders/{order_data['id']}")
+        assert response.status_code == 200
+
+        # Check that page contains remarks section
+        html = response.data.decode("utf-8")
+        assert "Remark History" in html
 
 
 if __name__ == "__main__":

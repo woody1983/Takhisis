@@ -395,23 +395,65 @@ def api_get_sku_detail(sku):
 
 @app.route("/api/work-orders", methods=["GET"])
 def api_get_work_orders():
-    """Get all work orders"""
+    """Get all work orders with status sorting and pagination"""
     status = request.args.get("status", "all")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+
+    # Validate pagination parameters
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = 10
+    if per_page > 100:
+        per_page = 100
+
+    offset = (page - 1) * per_page
 
     conn = get_db()
     cursor = conn.cursor()
 
+    # Build query with status priority: pending > completed > cancelled
     if status == "all":
-        cursor.execute("SELECT * FROM work_orders ORDER BY created_at DESC")
-    else:
+        # Get total count first
+        cursor.execute("SELECT COUNT(*) FROM work_orders")
+        total = cursor.fetchone()[0]
+
+        # Then get work orders sorted by status priority (pending first), then by created_at DESC
         cursor.execute(
-            "SELECT * FROM work_orders WHERE status = ? ORDER BY created_at DESC",
-            (status,),
+            """
+            SELECT * FROM work_orders 
+            ORDER BY 
+                CASE status 
+                    WHEN 'pending' THEN 1 
+                    WHEN 'completed' THEN 2 
+                    WHEN 'cancelled' THEN 3 
+                    ELSE 4 
+                END,
+                created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
+        )
+    else:
+        # Get total count for this status first
+        cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = ?", (status,))
+        total = cursor.fetchone()[0]
+
+        # Then get work orders
+        cursor.execute(
+            """
+            SELECT * FROM work_orders 
+            WHERE status = ? 
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (status, per_page, offset),
         )
 
     work_orders = [dict(row) for row in cursor.fetchall()]
 
-    # Get counts
+    # Get counts for all statuses
     cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'pending'")
     pending_count = cursor.fetchone()[0]
 
@@ -423,6 +465,8 @@ def api_get_work_orders():
 
     conn.close()
 
+    total_pages = (total + per_page - 1) // per_page
+
     return jsonify(
         {
             "work_orders": work_orders,
@@ -430,6 +474,12 @@ def api_get_work_orders():
                 "pending": pending_count,
                 "completed": completed_count,
                 "cancelled": cancelled_count,
+            },
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages,
             },
         }
     )
@@ -714,13 +764,36 @@ def index(page=1):
 
 
 @app.route("/work-orders")
-def work_orders_page():
-    """Render work orders page"""
+@app.route("/work-orders/page/<int:page>")
+def work_orders_page(page=1):
+    """Render work orders page with pagination and status sorting"""
+    per_page = 10
+    offset = (page - 1) * per_page
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM work_orders ORDER BY created_at DESC")
+    # Get work orders sorted by status priority (pending first), then by created_at DESC
+    cursor.execute(
+        """
+        SELECT * FROM work_orders 
+        ORDER BY 
+            CASE status 
+                WHEN 'pending' THEN 1 
+                WHEN 'completed' THEN 2 
+                WHEN 'cancelled' THEN 3 
+                ELSE 4 
+            END,
+            created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (per_page, offset),
+    )
     work_orders = [dict(row) for row in cursor.fetchall()]
+
+    # Get total count
+    cursor.execute("SELECT COUNT(*) FROM work_orders")
+    total = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'pending'")
     pending_count = cursor.fetchone()[0]
@@ -733,12 +806,23 @@ def work_orders_page():
 
     conn.close()
 
+    total_pages = (total + per_page - 1) // per_page
+
+    # Calculate pagination range
+    start_page = max(1, page - 2)
+    end_page = min(total_pages, page + 2)
+
     return render_template(
         "work_orders.html",
         work_orders=work_orders,
         pending_count=pending_count,
         completed_count=completed_count,
         cancelled_count=cancelled_count,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        start_page=start_page,
+        end_page=end_page,
     )
 
 

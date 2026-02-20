@@ -294,6 +294,51 @@
                 opacity: 0;
             }
         }
+        /* Pagination styles */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .pagination-info {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .pagination-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .pagination-controls a, .pagination-controls span {
+            padding: 8px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            color: var(--text-color);
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+        .pagination-controls a:hover {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .pagination-controls span.current {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+            font-weight: bold;
+        }
+        .pagination-controls span:not(.current) {
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -395,6 +440,42 @@
                     {% endfor %}
                 </tbody>
             </table>
+            
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <div class="pagination-info">
+                    Showing {{ (page - 1) * 10 + 1 }} - {{ [page * 10, total] | min }} of {{ total }} items
+                </div>
+                <div class="pagination-controls">
+                    {% if page > 1 %}
+                    <a href="{{ url_for('work_orders_page', page=page-1) }}">← Previous</a>
+                    {% endif %}
+                    
+                    {% if start_page > 1 %}
+                    <a href="{{ url_for('work_orders_page', page=1) }}">1</a>
+                    {% if start_page > 2 %}<span>...</span>{% endif %}
+                    {% endif %}
+                    
+                    {% for p in range(start_page, end_page + 1) %}
+                    {% if p == page %}
+                    <span class="current">{{ p }}</span>
+                    {% else %}
+                    <a href="{{ url_for('work_orders_page', page=p) }}">{{ p }}</a>
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% if end_page < total_pages %}
+                    {% if end_page < total_pages - 1 %}<span>...</span>{% endif %}
+                    <a href="{{ url_for('work_orders_page', page=total_pages) }}">{{ total_pages }}</a>
+                    {% endif %}
+                    
+                    {% if page < total_pages %}
+                    <a href="{{ url_for('work_orders_page', page=page+1) }}">Next →</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
             {% else %}
             <div class="empty">No work orders found. Create your first work order above.</div>
             {% endif %}

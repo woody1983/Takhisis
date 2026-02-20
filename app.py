@@ -7,6 +7,7 @@ Data Storage: SQLite Database
 
 import sqlite3
 import json
+import random
 from datetime import datetime
 from flask import (
     Flask,
@@ -19,6 +20,22 @@ from flask import (
 )
 from flask_cors import CORS
 import os
+
+
+def generate_work_order_id():
+    """Generate a random 6-digit work order ID"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    while True:
+        # Generate random 6-digit number (100000-999999)
+        new_id = random.randint(100000, 999999)
+        
+        # Check if ID already exists
+        cursor.execute("SELECT id FROM work_orders WHERE id = ?", (new_id,))
+        if cursor.fetchone() is None:
+            conn.close()
+            return new_id
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
 CORS(app)  # Enable CORS for React frontend
@@ -61,10 +78,10 @@ def init_db():
         )
     """)
 
-    # Create work_orders table
+    # Create work_orders table with 6-digit random ID
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS work_orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             sku TEXT NOT NULL,
             accessory_code TEXT NOT NULL,
             quantity INTEGER NOT NULL,
@@ -422,9 +439,11 @@ def api_get_work_orders():
         total = cursor.fetchone()[0]
 
         # Then get work orders sorted by status priority (pending first), then by created_at DESC
+        # Exclude location and customer_service_name from list view
         cursor.execute(
             """
-            SELECT * FROM work_orders 
+            SELECT id, sku, accessory_code, quantity, status, match_status, remark, created_at, completed_at 
+            FROM work_orders 
             ORDER BY 
                 CASE status 
                     WHEN 'pending' THEN 1 
@@ -443,9 +462,11 @@ def api_get_work_orders():
         total = cursor.fetchone()[0]
 
         # Then get work orders
+        # Exclude location and customer_service_name from list view
         cursor.execute(
             """
-            SELECT * FROM work_orders 
+            SELECT id, sku, accessory_code, quantity, status, match_status, remark, created_at, completed_at 
+            FROM work_orders 
             WHERE status = ? 
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -538,15 +559,17 @@ def api_add_work_order():
         
         message = "Work order created successfully"
 
+        # Generate random 6-digit ID
+        order_id = generate_work_order_id()
+        
         cursor.execute(
             """
-            INSERT INTO work_orders (sku, accessory_code, quantity, match_status, location, customer_service_name, remark)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO work_orders (id, sku, accessory_code, quantity, match_status, location, customer_service_name, remark)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-            (sku, accessory_code, quantity, match_status, location, customer_service_name, remark),
+            (order_id, sku, accessory_code, quantity, match_status, location, customer_service_name, remark),
         )
 
-        order_id = cursor.lastrowid
         conn.commit()
         conn.close()
 
@@ -903,6 +926,47 @@ def work_orders_page(page=1):
         total=total,
         start_page=start_page,
         end_page=end_page,
+    )
+
+
+@app.route("/work-orders/<int:id>")
+def work_order_detail(id):
+    """Render work order detail page"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get work order
+    cursor.execute("SELECT * FROM work_orders WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    if row is None:
+        conn.close()
+        return "Work order not found", 404
+    work_order = dict(row)
+
+    # Get accessory details if matched
+    accessory_details = None
+    if work_order.get("match_status") == "matched":
+        cursor.execute(
+            """
+            SELECT a.*, r.content as latest_remark 
+            FROM accessories a
+            LEFT JOIN remarks r ON a.id = r.accessory_id
+            WHERE a.sku = ?
+            ORDER BY r.created_at DESC
+            LIMIT 1
+        """,
+            (work_order["sku"],),
+        )
+        accessory = cursor.fetchone()
+        if accessory:
+            accessory_details = dict(accessory)
+
+    conn.close()
+
+    return render_template(
+        "work_order_detail.html",
+        work_order=work_order,
+        accessory_details=accessory_details
     )
 
 

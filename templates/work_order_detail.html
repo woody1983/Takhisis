@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Order #{{ work_order.id }} - Details</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: white;
+            --text-color: #333;
+            --text-secondary: #666;
+            --border-color: #ddd;
+        }
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eaeaea;
+            --text-secondary: #b8b8b8;
+            --border-color: #0f3460;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            color: var(--text-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #007bff;
+        }
+        .detail-card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .detail-row {
+            display: flex;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            width: 150px;
+            font-weight: bold;
+            color: var(--text-secondary);
+        }
+        .detail-value {
+            flex: 1;
+            color: var(--text-color);
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-pending {
+            background: #ffc107;
+            color: #000;
+        }
+        .status-completed {
+            background: #28a745;
+            color: white;
+        }
+        .status-cancelled {
+            background: #dc3545;
+            color: white;
+        }
+        .match-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .match-matched {
+            background: #28a745;
+            color: white;
+        }
+        .match-new_one {
+            background: #ffc107;
+            color: #000;
+        }
+        .accessory-info {
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        .accessory-info h3 {
+            margin-bottom: 10px;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="{{ url_for('work_orders_page') }}" class="back-link">← Back to Work Orders</a>
+        
+        <h1>Work Order #{{ work_order.id }}</h1>
+        
+        <div class="detail-card">
+            <div class="detail-row">
+                <div class="detail-label">Work Order ID</div>
+                <div class="detail-value">#{{ work_order.id }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">SKU</div>
+                <div class="detail-value"><strong>{{ work_order.sku }}</strong></div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Accessory Code</div>
+                <div class="detail-value">{{ work_order.accessory_code }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Quantity</div>
+                <div class="detail-value">{{ work_order.quantity }}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Status</div>
+                <div class="detail-value">
+                    <span class="status-badge status-{{ work_order.status }}">{{ work_order.status }}</span>
+                </div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Match Status</div>
+                <div class="detail-value">
+                    {% if work_order.match_status == 'matched' %}
+                    <span class="match-badge match-matched">✓ Matched</span>
+                    {% elif work_order.match_status == 'new_one' %}
+                    <span class="match-badge match-new_one">⚠ New One Required</span>
+                    {% else %}
+                    <span class="match-badge">Pending</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Location</div>
+                <div class="detail-value">
+                    {% if work_order.location %}
+                    <strong>{{ work_order.location }}</strong>
+                    {% else %}
+                    <span style="color: #999;">-</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Customer Service</div>
+                <div class="detail-value">
+                    {% if work_order.customer_service_name %}
+                    {{ work_order.customer_service_name }}
+                    {% else %}
+                    <span style="color: #999;">-</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Remark</div>
+                <div class="detail-value">
+                    {% if work_order.remark %}
+                    {{ work_order.remark }}
+                    {% else %}
+                    <span style="color: #999;">-</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Created At</div>
+                <div class="detail-value">{{ work_order.created_at }}</div>
+            </div>
+            {% if work_order.completed_at %}
+            <div class="detail-row">
+                <div class="detail-label">Completed At</div>
+                <div class="detail-value">{{ work_order.completed_at }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if accessory_details %}
+        <div class="detail-card">
+            <h3 style="margin-bottom: 15px; color: #007bff;">📦 Matched Accessory Details</h3>
+            <div class="accessory-info">
+                <div class="detail-row">
+                    <div class="detail-label">SKU</div>
+                    <div class="detail-value">{{ accessory_details.sku }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Location</div>
+                    <div class="detail-value"><strong>{{ accessory_details.location }}</strong></div>
+                </div>
+                {% if accessory_details.latest_remark %}
+                <div class="detail-row">
+                    <div class="detail-label">Latest Remark</div>
+                    <div class="detail-value">{{ accessory_details.latest_remark }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -406,7 +406,7 @@
                         <th>Accessory Code</th>
                         <th>Quantity</th>
                         <th>Status</th>
-                        <th>Customer Service</th>
+                        <th>Match Status</th>
                         <th>Created</th>
                         <th>Actions</th>
                     </tr>
@@ -414,14 +414,22 @@
                 <tbody>
                     {% for order in work_orders %}
                     <tr>
-                        <td>#{{ order.id }}</td>
+                        <td><a href="{{ url_for('work_order_detail', id=order.id) }}" style="color: #007bff; text-decoration: none; font-weight: bold;">#{{ order.id }}</a></td>
                         <td><strong>{{ order.sku }}</strong></td>
                         <td>{{ order.accessory_code }}</td>
                         <td>{{ order.quantity }}</td>
                         <td>
                             <span class="status-badge status-{{ order.status }}">{{ order.status }}</span>
                         </td>
-                        <td>{{ order.customer_service_name or '-' }}</td>
+                        <td>
+                            {% if order.match_status == 'matched' %}
+                            <span style="color: #28a745; font-weight: bold;">✓ Matched</span>
+                            {% elif order.match_status == 'new_one' %}
+                            <span style="color: #ffc107; font-weight: bold;">⚠ New</span>
+                            {% else %}
+                            <span style="color: #6c757d;">Pending</span>
+                            {% endif %}
+                        </td>
                         <td>{{ order.created_at }}</td>
                         <td class="actions">
                             {% if order.status == 'pending' %}

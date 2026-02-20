@@ -802,14 +802,16 @@ class TestWorkOrderSystem:
     def test_delete_work_order(self, client):
         """Test deleting a work order"""
         # Create work order
-        client.post(
+        response = client.post(
             "/api/work-orders",
             json={"sku": "TEST", "accessory_code": "ACC", "quantity": 1},
             content_type="application/json",
         )
+        data = response.get_json()
+        order_id = data["id"]
 
-        # Delete
-        response = client.delete("/api/work-orders/1")
+        # Delete using the actual order ID
+        response = client.delete(f"/api/work-orders/{order_id}")
         assert response.status_code == 200
         data = response.get_json()
         assert data["success"] is True
@@ -1112,6 +1114,33 @@ class TestWorkOrderInventoryMatching:
         conn.close()
 
         assert "match_status" in columns
+
+    def test_work_order_id_is_6_digit_number(self, client):
+        """Test that work order ID is a 6-digit random number"""
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "TEST-SKU-002", "accessory_code": "ACC-002", "quantity": 3},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        # Check ID is a 6-digit number
+        order_id = data["id"]
+        assert isinstance(order_id, int)
+        assert 100000 <= order_id <= 999999
+        
+        # Create another work order and verify ID is different
+        response2 = client.post(
+            "/api/work-orders",
+            json={"sku": "TEST-SKU-003", "accessory_code": "ACC-003", "quantity": 2},
+            content_type="application/json",
+        )
+        data2 = response2.get_json()
+        order_id2 = data2["id"]
+        
+        # IDs should be different
+        assert order_id != order_id2
 
     def test_create_work_order_auto_match_with_inventory(self, client):
         """Test creating work order auto-matches when SKU exists in inventory"""

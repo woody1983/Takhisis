@@ -407,6 +407,7 @@
                         <th>Quantity</th>
                         <th>Status</th>
                         <th>Match Status</th>
+                        <th>Location</th>
                         <th>Created</th>
                         <th>Actions</th>
                     </tr>
@@ -430,6 +431,7 @@
                             <span style="color: #6c757d;">Pending</span>
                             {% endif %}
                         </td>
+                        <td>{{ order.location or '-' }}</td>
                         <td>{{ order.created_at }}</td>
                         <td class="actions">
                             {% if order.status == 'pending' %}

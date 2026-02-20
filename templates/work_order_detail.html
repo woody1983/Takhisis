@@ -209,7 +209,11 @@
             <div class="accessory-info">
                 <div class="detail-row">
                     <div class="detail-label">SKU</div>
-                    <div class="detail-value">{{ accessory_details.sku }}</div>
+                    <div class="detail-value">
+                        <a href="{{ url_for('detail', id=accessory_details.id) }}" style="color: #007bff; text-decoration: none; font-weight: bold;">
+                            {{ accessory_details.sku }}
+                        </a>
+                    </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">Location</div>

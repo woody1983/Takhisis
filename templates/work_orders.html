@@ -424,10 +424,20 @@
             e.preventDefault();
             
             const formData = new FormData(this);
+            const data = {
+                sku: formData.get('sku'),
+                accessory_code: formData.get('accessory_code'),
+                quantity: formData.get('quantity'),
+                customer_service_name: formData.get('customer_service_name'),
+                remark: formData.get('remark')
+            };
             
-            fetch('/work_orders/add', {
+            fetch('/api/work-orders', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
             })
             .then(response => response.json())
             .then(data => {
@@ -445,12 +455,12 @@
         
         // Update status function
         function updateStatus(orderId, status) {
-            const formData = new FormData();
-            formData.append('status', status);
-            
-            fetch(`/work_orders/update/${orderId}`, {
-                method: 'POST',
-                body: formData
+            fetch(`/api/work-orders/${orderId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status: status })
             })
             .then(response => response.json())
             .then(data => {

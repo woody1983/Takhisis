@@ -118,6 +118,96 @@
             margin-bottom: 10px;
             color: #007bff;
         }
+        .sku-link {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .sku-link:hover {
+            text-decoration: underline;
+        }
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--card-bg);
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 {
+            margin: 0;
+            color: var(--text-color);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close:hover {
+            color: var(--text-color);
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .remarks-list {
+            margin-top: 15px;
+        }
+        .remark-item {
+            padding: 12px;
+            border-left: 3px solid #007bff;
+            background: var(--bg-color);
+            margin-bottom: 10px;
+            border-radius: 0 4px 4px 0;
+        }
+        .remark-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+        .remark-content {
+            color: var(--text-color);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .no-remarks {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -210,24 +300,83 @@
                 <div class="detail-row">
                     <div class="detail-label">SKU</div>
                     <div class="detail-value">
-                        <a href="{{ url_for('detail', id=accessory_details.id) }}" style="color: #007bff; text-decoration: none; font-weight: bold;">
+                        <span class="sku-link" onclick="openModal()">
                             {{ accessory_details.sku }}
-                        </a>
+                        </span>
                     </div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">Location</div>
                     <div class="detail-value"><strong>{{ accessory_details.location }}</strong></div>
                 </div>
-                {% if accessory_details.latest_remark %}
-                <div class="detail-row">
-                    <div class="detail-label">Latest Remark</div>
-                    <div class="detail-value">{{ accessory_details.latest_remark }}</div>
-                </div>
-                {% endif %}
             </div>
         </div>
         {% endif %}
     </div>
+
+    <!-- Modal -->
+    <div id="accessoryModal" class="modal-overlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2>Accessory Details - {{ accessory_details.sku if accessory_details else '' }}</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                {% if accessory_details %}
+                <div class="detail-row">
+                    <div class="detail-label">SKU</div>
+                    <div class="detail-value"><strong>{{ accessory_details.sku }}</strong></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Location</div>
+                    <div class="detail-value">{{ accessory_details.location }}</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Last Updated</div>
+                    <div class="detail-value">{{ accessory_details.updated_at }}</div>
+                </div>
+                
+                <h3 style="margin-top: 20px; margin-bottom: 10px; color: #007bff;">Remark History</h3>
+                <div class="remarks-list">
+                    {% if accessory_remarks %}
+                        {% for remark in accessory_remarks %}
+                        <div class="remark-item">
+                            <div class="remark-time">{{ remark.created_at }}</div>
+                            <div class="remark-content">{{ remark.content }}</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-remarks">No remarks found</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('accessoryModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            document.getElementById('accessoryModal').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function closeModalOnOverlay(event) {
+            if (event.target === document.getElementById('accessoryModal')) {
+                closeModal();
+            }
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
 </body>
 </html>

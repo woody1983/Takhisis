@@ -1029,21 +1029,32 @@ def work_order_detail(id):
 
     # Get accessory details if matched
     accessory_details = None
+    accessory_remarks = []
     if work_order.get("match_status") == "matched":
+        # Get accessory info
         cursor.execute(
             """
-            SELECT a.*, r.content as latest_remark 
+            SELECT a.*
             FROM accessories a
-            LEFT JOIN remarks r ON a.id = r.accessory_id
-            WHERE a.sku = ?
-            ORDER BY r.created_at DESC
-            LIMIT 1
+            WHERE a.sku = ? AND a.location = ?
         """,
-            (work_order["sku"],),
+            (work_order["sku"], work_order["location"]),
         )
         accessory = cursor.fetchone()
         if accessory:
             accessory_details = dict(accessory)
+
+            # Get all remarks for this accessory, ordered by time desc
+            cursor.execute(
+                """
+                SELECT id, content, created_at
+                FROM remarks
+                WHERE accessory_id = ?
+                ORDER BY created_at DESC
+            """,
+                (accessory["id"],),
+            )
+            accessory_remarks = [dict(row) for row in cursor.fetchall()]
 
     conn.close()
 
@@ -1051,6 +1062,7 @@ def work_order_detail(id):
         "work_order_detail.html",
         work_order=work_order,
         accessory_details=accessory_details,
+        accessory_remarks=accessory_remarks,
     )
 
 

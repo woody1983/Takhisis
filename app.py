@@ -569,14 +569,31 @@ def api_add_work_order():
                 is_removed = False
                 import re
 
-                pattern = rf"remove\s+{re.escape(accessory_code)}\b"
+                # Normalize accessory_code by removing spaces for comparison
+                # e.g., "part A" -> "partA", "Part 1" -> "Part1"
+                normalized_code = accessory_code.replace(" ", "").lower()
 
                 for remark_row in remarks:
-                    if remark_row["content"] and re.search(
-                        pattern, remark_row["content"], re.IGNORECASE
-                    ):
-                        is_removed = True
-                        break
+                    content = remark_row["content"]
+                    if content:
+                        # Find all "remove <something>" patterns in the content
+                        # Pattern matches: "remove xxx", "remove xxx -", "remove xxx\n", or "remove xxx at end"
+                        # The (.*?) captures everything after remove until end of line or " -"
+                        remove_patterns = re.findall(
+                            r"remove\s+(.*?)(?:\s+-|\s*$|\s*\n)", content, re.IGNORECASE
+                        )
+
+                        for removed_item in remove_patterns:
+                            # Normalize the removed item (remove spaces and lowercase)
+                            normalized_removed = removed_item.replace(" ", "").lower()
+
+                            # Check if it matches our accessory_code
+                            if normalized_removed == normalized_code:
+                                is_removed = True
+                                break
+
+                        if is_removed:
+                            break
 
                 if not is_removed:
                     # Found an available accessory

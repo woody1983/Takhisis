@@ -5,6 +5,7 @@ import AccessoriesPage from './pages/AccessoriesPage';
 import WorkOrdersPage from './pages/WorkOrdersPage';
 import AccessoryDetailPage from './pages/AccessoryDetailPage';
 import SKUDetailPage from './pages/SKUDetailPage';
+import DataExportPage from './pages/DataExportPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="/accessory/:id" element={<AccessoryDetailPage />} />
             <Route path="/sku/:sku" element={<SKUDetailPage />} />
+            <Route path="/data" element={<DataExportPage />} />
           </Routes>
         </main>
       </div>

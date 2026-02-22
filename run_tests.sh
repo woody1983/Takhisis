@@ -2,8 +2,8 @@
 # Run tests with coverage report
 
 echo "Running tests..."
-python -m pytest test_app.py -v "$@"
+./venv/bin/python3 -m pytest test_app.py -v "$@"
 
 echo ""
 echo "Running tests with coverage..."
-python -m pytest test_app.py --cov=app --cov-report=term-missing
+./venv/bin/python3 -m pytest test_app.py --cov=app --cov-report=term-missing

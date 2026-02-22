@@ -37,11 +37,14 @@ const AccessoriesPage = () => {
     setLoading(true);
     try {
       const response = await apiClient.get<AccessoriesResponse>(`/accessories?page=${page}&per_page=7`);
-      setAccessories(response.data.accessories);
-      setTotalPages(response.data.total_pages);
-      setTotalItems(response.data.total);
+      // Ensure data is array
+      const data = Array.isArray(response.data.accessories) ? response.data.accessories : [];
+      setAccessories(data);
+      setTotalPages(response.data.total_pages || 1);
+      setTotalItems(response.data.total || 0);
     } catch (error) {
       console.error('Failed to fetch accessories:', error);
+      setAccessories([]);
     } finally {
       setLoading(false);
     }
@@ -100,11 +103,11 @@ const AccessoriesPage = () => {
               </tr>
             </thead>
             <tbody>
-              {loading && accessories.length === 0 ? (
+              {loading && (!accessories || accessories.length === 0) ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading accessories...</td>
                 </tr>
-              ) : accessories.length === 0 ? (
+              ) : !accessories || accessories.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No accessories found</td>
                 </tr>

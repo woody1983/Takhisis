@@ -609,7 +609,7 @@ def api_export_accessories():
     conn.close()
 
     output = io.StringIO()
-    writer = csv.writer(output)
+    writer = csv.writer(output, lineterminator="\n")
     writer.writerow(["id", "sku", "location", "updated_at", "latest_remark"])
     for row in rows:
         writer.writerow(
@@ -622,9 +622,13 @@ def api_export_accessories():
             ]
         )
 
+    # Generate timestamp for filename: YYYYMMDD_HHMMSS
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"accessories_{timestamp}.csv"
+
     response = make_response(output.getvalue())
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = "attachment; filename=accessories.csv"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 
@@ -643,7 +647,7 @@ def api_export_work_orders():
     conn.close()
 
     output = io.StringIO()
-    writer = csv.writer(output)
+    writer = csv.writer(output, lineterminator="\n")
     writer.writerow(
         [
             "id",
@@ -676,9 +680,13 @@ def api_export_work_orders():
             ]
         )
 
+    # Generate timestamp for filename: YYYYMMDD_HHMMSS
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"work-orders_{timestamp}.csv"
+
     response = make_response(output.getvalue())
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = "attachment; filename=work-orders.csv"
+    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
     return response
 
 

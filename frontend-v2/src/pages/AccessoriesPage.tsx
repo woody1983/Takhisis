@@ -103,7 +103,12 @@ const AccessoriesPage = () => {
                 accessories.map((item) => (
                   <tr key={item.id} className="border-t border-gray-700 hover:bg-gray-700/50 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="font-semibold text-blue-400">{item.sku}</span>
+                      <Link 
+                        to={`/sku/${item.sku}`}
+                        className="font-semibold text-blue-400 hover:text-blue-300 hover:underline"
+                      >
+                        {item.sku}
+                      </Link>
                     </td>
                     <td className="px-6 py-4 text-gray-300">{item.location}</td>
                     <td className="px-6 py-4">

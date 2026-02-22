@@ -9,6 +9,19 @@ import sqlite3
 import json
 import random
 from datetime import datetime
+import os
+
+# Register adapters for sqlite3 to handle datetime objects correctly in Python 3.12+
+def adapt_datetime(dt):
+    return dt.isoformat()
+
+def convert_datetime(s):
+    return datetime.fromisoformat(s.decode())
+
+sqlite3.register_adapter(datetime, adapt_datetime)
+sqlite3.register_converter("TIMESTAMP", convert_datetime)
+sqlite3.register_converter("DATETIME", convert_datetime)
+
 from flask import (
     Flask,
     render_template,
@@ -17,6 +30,7 @@ from flask import (
     url_for,
     jsonify,
     send_from_directory,
+    make_response,
 )
 from flask_cors import CORS
 import os
@@ -355,7 +369,7 @@ def api_update_accessory(id):
             # Decrement old location count
             cursor.execute(
                 "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
-                (old_location,),
+                (old_location,),\
             )
 
             # Ensure new location exists and increment count
@@ -364,18 +378,13 @@ def api_update_accessory(id):
             )
             cursor.execute(
                 "UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?",
-                (location,),
+                (location,),\
             )
 
             # --- PERFORMANCE OPTIMIZATION: TRIGGER RE-MATCH ---
-            # Any work orders matched to this accessory's OLD location need to be re-matched
-            # because this specific accessory is no longer there.
             cursor.execute("SELECT sku FROM accessories WHERE id = ?", (id,))
             sku = cursor.fetchone()["sku"]
             re_match_affected_orders(cursor, sku, old_location)
-            
-            # Also, work orders matched to the NEW location might have better luck now,
-            # but usually it's the other way around. However, to be safe:
             re_match_affected_orders(cursor, sku, location)
             # --------------------------------------------------
 
@@ -388,6 +397,16 @@ def api_update_accessory(id):
             """,
                 (id, new_remark, datetime.now()),
             )
+            
+            # --- ISSUE 27+CONSISTENCY: TRIGGER RE-MATCH ON REMARK ---
+            # If the remark content changed, we must re-evaluate work orders 
+            # matched to this accessory's location because this item might 
+            # have just become unusable (e.g. "missing part X").
+            if old_location == location: # Only if not already triggered by location change
+                cursor.execute("SELECT sku FROM accessories WHERE id = ?", (id,))
+                sku = cursor.fetchone()["sku"]
+                re_match_affected_orders(cursor, sku, location)
+            # -------------------------------------------------------------
 
         conn.commit()
         conn.close()
@@ -1094,10 +1113,13 @@ def generate_unique_sku(cursor, sku, location):
 
 
 @app.route("/")
-@app.route("/page/<int:page>")
-def index(page=1):
-    """Serve React frontend"""
-    return send_from_directory(app.static_folder, "index.html")
+def index():
+    """Serve the React frontend index.html"""
+    response = make_response(send_from_directory(app.static_folder, "index.html"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.route("/work-orders")
@@ -1108,8 +1130,11 @@ def index(page=1):
 @app.route("/sku/<sku>")
 def serve_react(page=1, id=None, sku=None):
     """Catch-all for React SPA routes"""
-    return send_from_directory(app.static_folder, "index.html")
-    return send_from_directory(app.static_folder, "index.html")
+    response = make_response(send_from_directory(app.static_folder, "index.html"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # Legacy routes for backward compatibility with tests

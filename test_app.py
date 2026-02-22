@@ -1484,5 +1484,125 @@ class TestWorkOrderInventoryMatching:
         assert wo_details["location"] == "R-02-02"
 
 
+class TestDataExport:
+    """Test data export functionality (Issue #31)"""
+
+    def test_export_accessories_empty(self, client):
+        """Test /api/export/accessories returns 200, text/csv, header row only when no data"""
+        response = client.get("/api/export/accessories")
+        assert response.status_code == 200
+        assert response.content_type == "text/csv; charset=utf-8"
+        assert "attachment; filename=accessories.csv" in response.headers.get(
+            "Content-Disposition", ""
+        )
+
+        csv_content = response.data.decode("utf-8")
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 1
+        assert lines[0].strip() == "id,sku,location,updated_at,latest_remark"
+
+    def test_export_accessories_with_data(self, client):
+        """Test /api/export/accessories returns correct CSV rows matching inserted accessories"""
+        # Add test accessories
+        client.post(
+            "/api/accessories",
+            json={
+                "sku": "EXPORT-001",
+                "location": "E-01-01",
+                "remark": "Test remark 1",
+            },
+            content_type="application/json",
+        )
+        client.post(
+            "/api/accessories",
+            json={"sku": "EXPORT-002", "location": "E-01-02", "remark": ""},
+            content_type="application/json",
+        )
+
+        response = client.get("/api/export/accessories")
+        assert response.status_code == 200
+        assert response.content_type == "text/csv; charset=utf-8"
+
+        csv_content = response.data.decode("utf-8")
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 3  # Header + 2 data rows
+        assert lines[0].strip() == "id,sku,location,updated_at,latest_remark"
+        assert "EXPORT-001" in csv_content
+        assert "EXPORT-002" in csv_content
+        assert "Test remark 1" in csv_content
+
+    def test_export_work_orders_empty(self, client):
+        """Test /api/export/work-orders returns 200, text/csv, header row only when no data"""
+        response = client.get("/api/export/work-orders")
+        assert response.status_code == 200
+        assert response.content_type == "text/csv; charset=utf-8"
+        assert "attachment; filename=work-orders.csv" in response.headers.get(
+            "Content-Disposition", ""
+        )
+
+        csv_content = response.data.decode("utf-8")
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 1
+        assert (
+            lines[0].strip()
+            == "id,sku,accessory_code,quantity,status,match_status,location,customer_service_name,remark,created_at,completed_at"
+        )
+
+    def test_export_work_orders_with_data(self, client):
+        """Test /api/export/work-orders returns correct CSV rows matching inserted work orders"""
+        # Add a test accessory first (for matching)
+        client.post(
+            "/api/accessories",
+            json={"sku": "WO-EXPORT-001", "location": "W-01-01", "remark": ""},
+            content_type="application/json",
+        )
+
+        # Add test work orders
+        response1 = client.post(
+            "/api/work-orders",
+            json={"sku": "WO-EXPORT-001", "accessory_code": "partA", "quantity": 5},
+            content_type="application/json",
+        )
+        wo1_id = response1.get_json()["id"]
+
+        # Complete one work order
+        client.put(
+            f"/api/work-orders/{wo1_id}",
+            json={"status": "completed"},
+            content_type="application/json",
+        )
+
+        response = client.get("/api/export/work-orders")
+        assert response.status_code == 200
+        assert response.content_type == "text/csv; charset=utf-8"
+
+        csv_content = response.data.decode("utf-8")
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 2  # Header + 1 data row
+        assert (
+            lines[0].strip()
+            == "id,sku,accessory_code,quantity,status,match_status,location,customer_service_name,remark,created_at,completed_at"
+        )
+        assert str(wo1_id) in csv_content
+        assert "WO-EXPORT-001" in csv_content
+        assert "completed" in csv_content
+
+    def test_export_content_disposition(self, client):
+        """Test Content-Disposition header is set correctly for both exports"""
+        # Test accessories export
+        response = client.get("/api/export/accessories")
+        assert response.status_code == 200
+        content_disp = response.headers.get("Content-Disposition", "")
+        assert "attachment" in content_disp
+        assert "filename=accessories.csv" in content_disp
+
+        # Test work orders export
+        response = client.get("/api/export/work-orders")
+        assert response.status_code == 200
+        content_disp = response.headers.get("Content-Disposition", "")
+        assert "attachment" in content_disp
+        assert "filename=work-orders.csv" in content_disp
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -8,15 +8,20 @@ Data Storage: SQLite Database
 import sqlite3
 import json
 import random
+import csv
+import io
 from datetime import datetime
 import os
+
 
 # Register adapters for sqlite3 to handle datetime objects correctly in Python 3.12+
 def adapt_datetime(dt):
     return dt.isoformat()
 
+
 def convert_datetime(s):
     return datetime.fromisoformat(s.decode())
+
 
 sqlite3.register_adapter(datetime, adapt_datetime)
 sqlite3.register_converter("TIMESTAMP", convert_datetime)
@@ -397,12 +402,14 @@ def api_update_accessory(id):
             """,
                 (id, new_remark, datetime.now()),
             )
-            
+
             # --- ISSUE 27+CONSISTENCY: TRIGGER RE-MATCH ON REMARK ---
-            # If the remark content changed, we must re-evaluate work orders 
-            # matched to this accessory's location because this item might 
+            # If the remark content changed, we must re-evaluate work orders
+            # matched to this accessory's location because this item might
             # have just become unusable (e.g. "missing part X").
-            if old_location == location: # Only if not already triggered by location change
+            if (
+                old_location == location
+            ):  # Only if not already triggered by location change
                 cursor.execute("SELECT sku FROM accessories WHERE id = ?", (id,))
                 sku = cursor.fetchone()["sku"]
                 re_match_affected_orders(cursor, sku, location)
@@ -430,7 +437,7 @@ def api_delete_accessory(id):
         if row:
             sku = row["sku"]
             location = row["location"]
-            
+
             # Delete accessory
             cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
 
@@ -565,18 +572,114 @@ def api_get_sku_order_stats():
     conn.close()
 
     # Combine all SKUs from both sources
-    all_skus = set(inventory_counts.keys()) | set(order_pending.keys()) | set(order_completed.keys())
+    all_skus = (
+        set(inventory_counts.keys())
+        | set(order_pending.keys())
+        | set(order_completed.keys())
+    )
 
     result = []
     for sku in sorted(all_skus):
-        result.append({
-            "sku": sku,
-            "inventory": inventory_counts.get(sku, 0),
-            "pending": order_pending.get(sku, 0),
-            "completed": order_completed.get(sku, 0),
-        })
+        result.append(
+            {
+                "sku": sku,
+                "inventory": inventory_counts.get(sku, 0),
+                "pending": order_pending.get(sku, 0),
+                "completed": order_completed.get(sku, 0),
+            }
+        )
 
     return jsonify(result)
+
+
+@app.route("/api/export/accessories", methods=["GET"])
+def api_export_accessories():
+    """Export all accessories as CSV download"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT a.id, a.sku, a.location, a.updated_at,
+               (SELECT content FROM remarks
+                WHERE accessory_id = a.id
+                ORDER BY created_at DESC LIMIT 1) as latest_remark
+        FROM accessories a
+        ORDER BY a.updated_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "sku", "location", "updated_at", "latest_remark"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["sku"],
+                row["location"],
+                row["updated_at"],
+                row["latest_remark"] or "",
+            ]
+        )
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = "attachment; filename=accessories.csv"
+    return response
+
+
+@app.route("/api/export/work-orders", methods=["GET"])
+def api_export_work_orders():
+    """Export all work orders as CSV download"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, sku, accessory_code, quantity, status, match_status,
+               location, customer_service_name, remark, created_at, completed_at
+        FROM work_orders
+        ORDER BY created_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "sku",
+            "accessory_code",
+            "quantity",
+            "status",
+            "match_status",
+            "location",
+            "customer_service_name",
+            "remark",
+            "created_at",
+            "completed_at",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row["id"],
+                row["sku"],
+                row["accessory_code"],
+                row["quantity"],
+                row["status"],
+                row["match_status"],
+                row["location"] or "",
+                row["customer_service_name"] or "",
+                row["remark"] or "",
+                row["created_at"],
+                row["completed_at"] or "",
+            ]
+        )
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = "attachment; filename=work-orders.csv"
+    return response
 
 
 @app.route("/api/sku/<sku>", methods=["GET"])
@@ -734,15 +837,15 @@ def find_available_accessory(cursor, sku, accessory_code):
     # Example: "ACC-001" -> "A\s*C\s*C\s*-\s*0\s*0\s*1"
     code_parts = [re.escape(c) for c in accessory_code.replace(" ", "")]
     code_regex = r"\s*".join(code_parts)
-    
+
     # Boundary patterns to ensure we don't match part of another code
     border_start = r"(?:^|[\s,.;!?-])"
     border_end = r"(?=[\s,.;!?-]|$)"
-    
+
     # Patterns to detect exclusion
     exclusion_patterns = [
         rf"(?i)(?:remove|missing)\s+(?:.*?\s+)?{code_regex}{border_end}",
-        rf"(?i){border_start}{code_regex}\s+is\s+missing"
+        rf"(?i){border_start}{code_regex}\s+is\s+missing",
     ]
 
     for accessory in inventory_matches:
@@ -753,12 +856,12 @@ def find_available_accessory(cursor, sku, accessory_code):
         )
         remarks = cursor.fetchall()
         is_removed = False
-        
+
         for remark_row in remarks:
             content = remark_row["content"]
             if not content:
                 continue
-                
+
             for pattern in exclusion_patterns:
                 if re.search(pattern, content):
                     is_removed = True

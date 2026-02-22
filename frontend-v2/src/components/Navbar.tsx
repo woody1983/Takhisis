@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, MapPin } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, MapPin, Download } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -14,6 +14,7 @@ const Navbar = () => {
     { name: 'Accessories', path: '/', icon: LayoutDashboard },
     { name: 'Work Orders', path: '/work-orders', icon: ClipboardList },
     { name: 'Locations', path: '/locations', icon: MapPin },
+    { name: 'Data', path: '/data', icon: Download },
   ];
 
   return (

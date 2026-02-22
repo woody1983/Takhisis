@@ -369,7 +369,7 @@ def api_update_accessory(id):
             # Decrement old location count
             cursor.execute(
                 "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
-                (old_location,),\
+                (old_location,),
             )
 
             # Ensure new location exists and increment count
@@ -378,7 +378,7 @@ def api_update_accessory(id):
             )
             cursor.execute(
                 "UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?",
-                (location,),\
+                (location,),
             )
 
             # --- PERFORMANCE OPTIMIZATION: TRIGGER RE-MATCH ---

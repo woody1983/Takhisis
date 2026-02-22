@@ -4,12 +4,13 @@ import apiClient from '../apiClient';
 
 type SkuStat = [string, number];
 
-const SKUStatistics = () => {
+const SKUStatistics = ({ refreshKey = 0 }: { refreshKey?: number }) => {
   const [stats, setStats] = useState<SkuStat[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
+      setLoading(true);
       try {
         const response = await apiClient.get<SkuStat[]>('/sku-stats');
         setStats(response.data);
@@ -21,7 +22,7 @@ const SKUStatistics = () => {
     };
 
     fetchStats();
-  }, []);
+  }, [refreshKey]);
 
   if (loading) return <div className="p-8 text-center text-gray-400">Loading statistics...</div>;
   if (stats.length === 0) return <div className="p-8 text-center text-gray-400">No SKU statistics available</div>;

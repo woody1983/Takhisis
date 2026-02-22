@@ -38,7 +38,7 @@ def generate_work_order_id():
             return new_id
 
 
-app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
+app = Flask(__name__, static_folder="frontend-v2/dist", static_url_path="")
 CORS(
     app,
     resources={
@@ -367,6 +367,18 @@ def api_update_accessory(id):
                 (location,),
             )
 
+            # --- PERFORMANCE OPTIMIZATION: TRIGGER RE-MATCH ---
+            # Any work orders matched to this accessory's OLD location need to be re-matched
+            # because this specific accessory is no longer there.
+            cursor.execute("SELECT sku FROM accessories WHERE id = ?", (id,))
+            sku = cursor.fetchone()["sku"]
+            re_match_affected_orders(cursor, sku, old_location)
+            
+            # Also, work orders matched to the NEW location might have better luck now,
+            # but usually it's the other way around. However, to be safe:
+            re_match_affected_orders(cursor, sku, location)
+            # --------------------------------------------------
+
         # Add new remark if provided
         if new_remark:
             cursor.execute(
@@ -393,11 +405,14 @@ def api_delete_accessory(id):
     cursor = conn.cursor()
 
     try:
-        # Get location before deleting
-        cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
+        # Get accessory details before deleting
+        cursor.execute("SELECT sku, location FROM accessories WHERE id = ?", (id,))
         row = cursor.fetchone()
         if row:
+            sku = row["sku"]
             location = row["location"]
+            
+            # Delete accessory
             cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
 
             # Decrement usage count
@@ -405,6 +420,10 @@ def api_delete_accessory(id):
                 "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
                 (location,),
             )
+
+            # --- PERFORMANCE OPTIMIZATION: TRIGGER RE-MATCH ---
+            re_match_affected_orders(cursor, sku, location)
+            # --------------------------------------------------
 
         conn.commit()
         conn.close()
@@ -547,10 +566,10 @@ def api_get_work_orders():
     conn = get_db()
     cursor = conn.cursor()
 
-    # ===== Force re-match for all pending orders before fetching =====
-    force_rematch_all_pending_orders(cursor)
-    conn.commit()  # Commit any changes from the re-match
-    # =================================================================
+    # ===== Removed force re-match for performance =====
+    # force_rematch_all_pending_orders(cursor)
+    # conn.commit()  # Commit any changes from the re-match
+    # ===================================================
 
     # Build query with status priority: pending > completed > cancelled
     if status == "all":
@@ -788,6 +807,34 @@ def re_match_pending_work_orders(cursor, sku, accessory_code, old_location):
             )
 
 
+def re_match_affected_orders(cursor, sku, location):
+    """Re-match work orders that were matched to a specific SKU at a specific location"""
+    # Find orders matched to this SKU at this location
+    cursor.execute(
+        """
+        SELECT id, accessory_code FROM work_orders 
+        WHERE status = 'pending' AND match_status = 'matched' AND sku = ? AND location = ?
+        """,
+        (sku, location),
+    )
+    affected_orders = cursor.fetchall()
+    for order in affected_orders:
+        order_id = order["id"]
+        acc_code = order["accessory_code"]
+        # Try to find a new available accessory
+        match = find_available_accessory(cursor, sku, acc_code)
+        if match:
+            cursor.execute(
+                "UPDATE work_orders SET location = ? WHERE id = ?",
+                (match["location"], order_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
+                (order_id,),
+            )
+
+
 @app.route("/api/work-orders/<int:id>", methods=["PUT"])
 def api_update_work_order(id):
     """Update work order status"""
@@ -872,34 +919,7 @@ def api_get_work_order(id):
     cursor = conn.cursor()
 
     try:
-        # Force a re-match on this specific order before displaying
-        cursor.execute(
-            "SELECT status, sku, accessory_code, match_status, location FROM work_orders WHERE id = ? AND status = 'pending'",
-            (id,),
-        )
-        order_to_check = cursor.fetchone()
-
-        if order_to_check:
-            new_match = find_available_accessory(
-                cursor, order_to_check["sku"], order_to_check["accessory_code"]
-            )
-            if new_match:
-                if (
-                    order_to_check["match_status"] != "matched"
-                    or order_to_check["location"] != new_match["location"]
-                ):
-                    cursor.execute(
-                        "UPDATE work_orders SET match_status = 'matched', location = ? WHERE id = ?",
-                        (new_match["location"], id),
-                    )
-                    conn.commit()
-            else:
-                if order_to_check["match_status"] != "new_one":
-                    cursor.execute(
-                        "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
-                        (id,),
-                    )
-                    conn.commit()
+        # Removed force re-match on read for performance
 
         # Get work order details
         cursor.execute(
@@ -1062,419 +1082,20 @@ def generate_unique_sku(cursor, sku, location):
 @app.route("/")
 @app.route("/page/<int:page>")
 def index(page=1):
-    """Render homepage with accessories list"""
-    per_page = 7
-    offset = (page - 1) * per_page
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get total count
-    cursor.execute("SELECT COUNT(*) as total FROM accessories")
-    total = cursor.fetchone()["total"]
-    total_pages = (total + per_page - 1) // per_page
-
-    # Get accessories for current page
-    cursor.execute(
-        """
-        SELECT a.*, 
-               (SELECT content FROM remarks 
-                WHERE accessory_id = a.id 
-                ORDER BY created_at DESC LIMIT 1) as latest_remark
-        FROM accessories a
-        ORDER BY a.updated_at DESC
-        LIMIT ? OFFSET ?
-    """,
-        (per_page, offset),
-    )
-    accessories = [dict(row) for row in cursor.fetchall()]
-
-    # Get all SKUs for autocomplete
-    cursor.execute("SELECT DISTINCT sku FROM accessories ORDER BY sku")
-    skus = [row["sku"] for row in cursor.fetchall()]
-
-    # Get all locations
-    cursor.execute("SELECT * FROM locations ORDER BY usage_count DESC, name ASC")
-    locations = [dict(row) for row in cursor.fetchall()]
-
-    # Get SKU stats
-    cursor.execute("SELECT sku FROM accessories")
-    sku_counts = {}
-    for row in cursor.fetchall():
-        sku = row["sku"]
-        base_sku = sku.split("*")[0] if "*" in sku else sku
-        sku_counts[base_sku] = sku_counts.get(base_sku, 0) + 1
-    sku_stats = sorted(sku_counts.items(), key=lambda x: x[1], reverse=True)
-
-    conn.close()
-
-    # Calculate pagination range
-    start_page = max(1, page - 2)
-    end_page = min(total_pages, page + 2)
-
-    return render_template(
-        "index.html",
-        accessories=accessories,
-        skus=skus,
-        locations=locations,
-        sku_stats=sku_stats,
-        page=page,
-        total_pages=total_pages,
-        total=total,
-        total_items=total,
-        start_page=start_page,
-        end_page=end_page,
-    )
+    """Serve React frontend"""
+    return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/work-orders")
 @app.route("/work-orders/page/<int:page>")
-def work_orders_page(page=1):
-    """Render work orders page with pagination and status sorting"""
-    per_page = 10
-    offset = (page - 1) * per_page
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get work orders sorted by status priority (pending first), then by created_at DESC
-    cursor.execute(
-        """
-        SELECT * FROM work_orders 
-        ORDER BY 
-            CASE status 
-                WHEN 'pending' THEN 1 
-                WHEN 'completed' THEN 2 
-                WHEN 'cancelled' THEN 3 
-                ELSE 4 
-            END,
-            created_at DESC
-        LIMIT ? OFFSET ?
-        """,
-        (per_page, offset),
-    )
-    work_orders = [dict(row) for row in cursor.fetchall()]
-
-    # Get total count
-    cursor.execute("SELECT COUNT(*) FROM work_orders")
-    total = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'pending'")
-    pending_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'completed'")
-    completed_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM work_orders WHERE status = 'cancelled'")
-    cancelled_count = cursor.fetchone()[0]
-
-    conn.close()
-
-    total_pages = (total + per_page - 1) // per_page
-
-    # Calculate pagination range
-    start_page = max(1, page - 2)
-    end_page = min(total_pages, page + 2)
-
-    return render_template(
-        "work_orders.html",
-        work_orders=work_orders,
-        pending_count=pending_count,
-        completed_count=completed_count,
-        cancelled_count=cancelled_count,
-        page=page,
-        total_pages=total_pages,
-        total=total,
-        start_page=start_page,
-        end_page=end_page,
-    )
-
-
 @app.route("/work-orders/<int:id>")
-def work_order_detail(id):
-    """Render work order detail page"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Force a re-match on this specific order before displaying
-    cursor.execute(
-        "SELECT status, sku, accessory_code, match_status, location FROM work_orders WHERE id = ? AND status = 'pending'",
-        (id,),
-    )
-    order_to_check = cursor.fetchone()
-
-    if order_to_check:
-        new_match = find_available_accessory(
-            cursor, order_to_check["sku"], order_to_check["accessory_code"]
-        )
-        if new_match:
-            if (
-                order_to_check["match_status"] != "matched"
-                or order_to_check["location"] != new_match["location"]
-            ):
-                cursor.execute(
-                    "UPDATE work_orders SET match_status = 'matched', location = ? WHERE id = ?",
-                    (new_match["location"], id),
-                )
-                conn.commit()
-        else:
-            if order_to_check["match_status"] != "new_one":
-                cursor.execute(
-                    "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
-                    (id,),
-                )
-                conn.commit()
-
-    # Get work order
-    cursor.execute("SELECT * FROM work_orders WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if row is None:
-        conn.close()
-        return "Work order not found", 404
-    work_order = dict(row)
-
-    # Get accessory details if matched
-    accessory_details = None
-    accessory_remarks = []
-    if work_order.get("match_status") == "matched":
-        # Get accessory info
-        cursor.execute(
-            """
-            SELECT a.*
-            FROM accessories a
-            WHERE a.sku = ? AND a.location = ?
-        """,
-            (work_order["sku"], work_order["location"]),
-        )
-        accessory = cursor.fetchone()
-        if accessory:
-            accessory_details = dict(accessory)
-
-            # Get all remarks for this accessory, ordered by time desc
-            cursor.execute(
-                """
-                SELECT id, content, created_at
-                FROM remarks
-                WHERE accessory_id = ?
-                ORDER BY created_at DESC
-            """,
-                (accessory["id"],),
-            )
-            accessory_remarks = [dict(row) for row in cursor.fetchall()]
-
-    conn.close()
-
-    return render_template(
-        "work_order_detail.html",
-        work_order=work_order,
-        accessory_details=accessory_details,
-        accessory_remarks=accessory_remarks,
-    )
-
-
 @app.route("/locations")
-def locations_page():
-    """Render locations management page"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM locations ORDER BY usage_count DESC, name ASC")
-    locations = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return render_template("locations.html", locations=locations)
-
-
 @app.route("/detail/<int:id>")
-def detail(id):
-    """Render accessory detail page"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get accessory
-    cursor.execute("SELECT * FROM accessories WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if row is None:
-        conn.close()
-        return "Accessory not found", 404
-    accessory = dict(row)
-
-    # Get remarks
-    cursor.execute(
-        """
-        SELECT * FROM remarks 
-        WHERE accessory_id = ? 
-        ORDER BY created_at DESC
-    """,
-        (id,),
-    )
-    remarks = [dict(row) for row in cursor.fetchall()]
-
-    conn.close()
-
-    return render_template("detail.html", accessory=accessory, remarks=remarks)
-
-
 @app.route("/sku/<sku>")
-def sku_detail(sku):
-    """Render SKU detail page"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get accessories for this SKU
-    cursor.execute(
-        """
-        SELECT a.*, 
-               (SELECT content FROM remarks 
-                WHERE accessory_id = a.id 
-                ORDER BY created_at DESC LIMIT 1) as latest_remark
-        FROM accessories a
-        WHERE a.sku = ? OR a.sku LIKE ?
-        ORDER BY a.location
-    """,
-        (sku, f"{sku}*%"),
-    )
-    accessories = [dict(row) for row in cursor.fetchall()]
-
-    # Get unique locations
-    locations = list(set([a["location"] for a in accessories]))
-
-    conn.close()
-
-    return render_template(
-        "sku_detail.html",
-        base_sku=sku,
-        accessories=accessories,
-        locations=locations,
-        total_count=len(accessories),
-    )
-
-
-@app.route("/update/<int:id>", methods=["POST"])
-def update_accessory(id):
-    """Update accessory"""
-    location = request.form.get("location", "").strip()
-    new_remark = request.form.get("new_remark", "").strip()
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get old location before updating
-    cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
-    old_location = cursor.fetchone()["location"]
-
-    # Update location and timestamp
-    cursor.execute(
-        """
-        UPDATE accessories 
-        SET location = ?, updated_at = ?
-        WHERE id = ?
-    """,
-        (location, datetime.now(), id),
-    )
-
-    if old_location != location:
-        # Decrement old location count
-        cursor.execute(
-            "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
-            (old_location,),
-        )
-        # Increment new location count
-        cursor.execute(
-            "UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?",
-            (location,),
-        )
-
-    # Add new remark if provided
-    if new_remark:
-        cursor.execute(
-            """
-            INSERT INTO remarks (accessory_id, content, created_at)
-            VALUES (?, ?, ?)
-        """,
-            (id, new_remark, datetime.now()),
-        )
-
-    conn.commit()
-    conn.close()
-
-    return redirect(url_for("detail", id=id))
-
-
-@app.route("/api/remarks/<int:id>", methods=["DELETE"])
-def api_delete_remark(id):
-    """Delete a remark"""
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM remarks WHERE id = ?", (id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True, "message": "Remark deleted"})
-    except Exception as e:
-        conn.close()
-        return jsonify({"success": False, "message": str(e)}), 500
-
-
-@app.route("/delete-remark/<int:remark_id>", methods=["POST"])
-def delete_remark(remark_id):
-    """Delete a remark"""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Get accessory_id before deleting
-    cursor.execute("SELECT accessory_id FROM remarks WHERE id = ?", (remark_id,))
-    result = cursor.fetchone()
-    accessory_id = result["accessory_id"] if result else None
-
-    cursor.execute("DELETE FROM remarks WHERE id = ?", (remark_id,))
-    conn.commit()
-    conn.close()
-
-    if accessory_id:
-        return redirect(url_for("detail", id=accessory_id))
-    return redirect(url_for("index"))
-
-
-@app.route("/delete/<int:id>", methods=["POST"])
-def delete_accessory(id):
-    """Delete accessory and redirect to index"""
-    conn = get_db()
-    cursor = conn.cursor()
-    # Get location before deleting
-    cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if row:
-        location = row["location"]
-        cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
-        # Decrement usage count
-        cursor.execute(
-            "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
-            (location,),
-        )
-    conn.commit()
-    conn.close()
-    return redirect(url_for("index"))
-
-
-@app.route("/delete-location/<int:location_id>", methods=["POST"])
-def delete_location(location_id):
-    """Delete location and redirect to locations page"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM locations WHERE id = ?", (location_id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("locations_page"))
-
-
-@app.route("/delete-work-order/<int:order_id>", methods=["POST"])
-def delete_work_order(order_id):
-    """Delete work order and redirect to work orders page"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM work_orders WHERE id = ?", (order_id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("work_orders_page"))
+def serve_react(page=1, id=None, sku=None):
+    """Catch-all for React SPA routes"""
+    return send_from_directory(app.static_folder, "index.html")
+    return send_from_directory(app.static_folder, "index.html")
 
 
 # Legacy routes for backward compatibility with tests
@@ -1565,6 +1186,17 @@ def add_location_legacy():
         return jsonify({"success": False, "message": "Location already exists"}), 409
 
 
+@app.route("/delete_remark/<int:remark_id>", methods=["POST"])
+def delete_remark_legacy(remark_id):
+    """Legacy route for deleting remarks"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM remarks WHERE id = ?", (remark_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+
 @app.route("/locations/delete/<int:location_id>", methods=["POST"])
 def delete_location_legacy(location_id):
     """Legacy route for deleting locations"""
@@ -1573,17 +1205,11 @@ def delete_location_legacy(location_id):
     cursor.execute("DELETE FROM locations WHERE id = ?", (location_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for("locations_page"))
-
-
-@app.route("/delete_remark/<int:remark_id>", methods=["POST"])
-def delete_remark_legacy(remark_id):
-    """Legacy route for deleting remarks"""
-    return delete_remark(remark_id)
+    return jsonify({"success": True})
 
 
 if __name__ == "__main__":
     init_db()
     print("Accessory Management System API starting...")
     print("API URL: http://127.0.0.1:5001/api")
-    app.run(debug=True, host="0.0.0.0", port=5001)
+    app.run(debug=True, host="0.0.0.0", port=5003)

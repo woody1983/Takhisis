@@ -72,7 +72,7 @@ const AccessoriesPage = () => {
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-white">Accessory Management</h1>
-        <button 
+        <button
           onClick={refresh}
           className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white"
           title="Refresh data"
@@ -111,7 +111,7 @@ const AccessoriesPage = () => {
                 accessories.map((item) => (
                   <tr key={item.id} className="border-t border-gray-700 hover:bg-gray-700/50 transition-colors">
                     <td className="px-6 py-4">
-                      <Link 
+                      <Link
                         to={`/sku/${item.sku}`}
                         className="font-semibold text-blue-400 hover:text-blue-300 hover:underline"
                       >
@@ -129,14 +129,14 @@ const AccessoriesPage = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-center gap-2">
-                        <button 
+                        <button
                           onClick={() => openAccessoryDetail(item.id)}
                           className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded transition-colors"
                           title="Details"
                         >
                           <Eye size={16} />
                         </button>
-                        <button 
+                        <button
                           className="p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded transition-colors"
                           title="Delete"
                           onClick={() => handleDelete(item.id)}
@@ -151,21 +151,21 @@ const AccessoriesPage = () => {
             </tbody>
           </table>
         </div>
-        
+
         <div className="bg-gray-900/30 px-6 py-3 flex justify-between items-center border-t border-gray-700">
           <span className="text-sm text-gray-500">
             Showing {(page - 1) * 7 + 1} - {Math.min(page * 7, totalItems)} of {totalItems} items
           </span>
-          <Pagination 
-            currentPage={page} 
-            totalPages={totalPages} 
-            onPageChange={setPage} 
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        <SKUStatistics />
+        <SKUStatistics refreshKey={refreshKey} />
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 flex items-center justify-center text-gray-500 italic">
           More statistics coming soon...
         </div>

@@ -12,15 +12,24 @@ const DataExportPage = () => {
 
   const handleExportAccessories = () => {
     setExportStatus((prev) => ({ ...prev, accessories: 'loading' }));
-    
+
+    // Generate timestamp: YYYYMMDD_HHMMSS
+    const now = new Date();
+    const timestamp = now.getFullYear() +
+                      String(now.getMonth() + 1).padStart(2, '0') +
+                      String(now.getDate()).padStart(2, '0') + '_' +
+                      String(now.getHours()).padStart(2, '0') +
+                      String(now.getMinutes()).padStart(2, '0') +
+                      String(now.getSeconds()).padStart(2, '0');
+
     // Trigger download via anchor tag
     const link = document.createElement('a');
     link.href = '/api/export/accessories';
-    link.download = 'accessories.csv';
+    link.download = `accessories_${timestamp}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     // Show success message briefly
     setTimeout(() => {
       setExportStatus((prev) => ({ ...prev, accessories: 'success' }));
@@ -32,15 +41,24 @@ const DataExportPage = () => {
 
   const handleExportWorkOrders = () => {
     setExportStatus((prev) => ({ ...prev, workOrders: 'loading' }));
-    
+
+    // Generate timestamp: YYYYMMDD_HHMMSS
+    const now = new Date();
+    const timestamp = now.getFullYear() +
+                      String(now.getMonth() + 1).padStart(2, '0') +
+                      String(now.getDate()).padStart(2, '0') + '_' +
+                      String(now.getHours()).padStart(2, '0') +
+                      String(now.getMinutes()).padStart(2, '0') +
+                      String(now.getSeconds()).padStart(2, '0');
+
     // Trigger download via anchor tag
     const link = document.createElement('a');
     link.href = '/api/export/work-orders';
-    link.download = 'work-orders.csv';
+    link.download = `work-orders_${timestamp}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     // Show success message briefly
     setTimeout(() => {
       setExportStatus((prev) => ({ ...prev, workOrders: 'success' }));

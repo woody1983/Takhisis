@@ -56,11 +56,14 @@ const WorkOrdersPage = () => {
     setLoading(true);
     try {
       const response = await apiClient.get<WorkOrdersResponse>(`/work-orders?status=${status}&page=${page}&per_page=10`);
-      setWorkOrders(response.data.work_orders);
-      setCounts(response.data.counts);
-      setTotalPages(response.data.pagination.total_pages);
+      // Ensure data is array
+      const orders = Array.isArray(response.data.work_orders) ? response.data.work_orders : [];
+      setWorkOrders(orders);
+      setCounts(response.data.counts || { pending: 0, completed: 0, cancelled: 0 });
+      setTotalPages(response.data.pagination?.total_pages || 1);
     } catch (error) {
       console.error('Failed to fetch work orders:', error);
+      setWorkOrders([]);
     } finally {
       setLoading(false);
     }

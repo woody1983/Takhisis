@@ -13,9 +13,12 @@ const SKUStatistics = ({ refreshKey = 0 }: { refreshKey?: number }) => {
       setLoading(true);
       try {
         const response = await apiClient.get<SkuStat[]>('/sku-stats');
-        setStats(response.data);
+        // Ensure data is an array
+        const data = Array.isArray(response.data) ? response.data : [];
+        setStats(data);
       } catch (error) {
         console.error('Failed to fetch SKU statistics:', error);
+        setStats([]);
       } finally {
         setLoading(false);
       }

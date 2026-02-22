@@ -21,9 +21,11 @@ function LocationsPage() {
     setLoading(true);
     try {
       const response = await apiClient.get<Location[]>('/locations');
-      setLocations(response.data);
+      // Ensure data is array
+      setLocations(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       setError('Failed to fetch locations.');
+      setLocations([]);
     } finally {
       setLoading(false);
     }

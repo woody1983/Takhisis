@@ -31,10 +31,13 @@ const AddAccessoryForm = ({ onSuccess }: AddAccessoryFormProps) => {
           apiClient.get<Location[]>('/locations'),
           apiClient.get<string[]>('/skus')
         ]);
-        setLocations(locRes.data);
-        setAllSkus(skuRes.data);
+        // Ensure data is array
+        setLocations(Array.isArray(locRes.data) ? locRes.data : []);
+        setAllSkus(Array.isArray(skuRes.data) ? skuRes.data : []);
       } catch (err) {
         console.error('Failed to fetch form data:', err);
+        setLocations([]);
+        setAllSkus([]);
       }
     };
     fetchData();

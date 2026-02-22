@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, ExternalLink, Box } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, MapPin, Box, Eye } from 'lucide-react';
 import apiClient from '../apiClient';
+import AccessoryDetailModal from '../components/AccessoryDetailModal';
 
 interface Accessory {
   id: number;
@@ -23,21 +24,28 @@ const SKUDetailPage = () => {
   const navigate = useNavigate();
   const [data, setData] = useState<SkuDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedAccessoryId, setSelectedAccessoryId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const fetchSkuDetail = async () => {
+    try {
+      const response = await apiClient.get<SkuDetail>(`/sku/${sku}`);
+      setData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch SKU details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchSkuDetail = async () => {
-      try {
-        const response = await apiClient.get<SkuDetail>(`/sku/${sku}`);
-        setData(response.data);
-      } catch (error) {
-        console.error('Failed to fetch SKU details:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchSkuDetail();
   }, [sku]);
+
+  const openAccessoryDetail = (id: number) => {
+    setSelectedAccessoryId(id);
+    setIsModalOpen(true);
+  };
 
   if (loading) return <div className="p-8 text-center text-gray-400">Loading SKU details...</div>;
   if (!data) return <div className="p-8 text-center text-gray-400">SKU not found</div>;
@@ -120,13 +128,13 @@ const SKUDetailPage = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <Link
-                          to={`/accessory/${item.id}`}
+                        <button
+                          onClick={() => openAccessoryDetail(item.id)}
                           className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-400 font-medium"
                         >
                           View Details
-                          <ExternalLink size={14} />
-                        </Link>
+                          <Eye size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -136,6 +144,13 @@ const SKUDetailPage = () => {
           </div>
         </div>
       </div>
+
+      <AccessoryDetailModal
+        isOpen={isModalOpen}
+        accessoryId={selectedAccessoryId}
+        onClose={() => setIsModalOpen(false)}
+        onUpdate={fetchSkuDetail}
+      />
     </div>
   );
 };

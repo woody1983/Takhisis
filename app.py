@@ -661,7 +661,22 @@ def find_available_accessory(cursor, sku, accessory_code):
 
     import re
 
-    normalized_code = accessory_code.replace(" ", "").lower()
+    import re
+
+    # Create a regex that matches the accessory_code even if it has extra spaces
+    # Example: "ACC-001" -> "A\s*C\s*C\s*-\s*0\s*0\s*1"
+    code_parts = [re.escape(c) for c in accessory_code.replace(" ", "")]
+    code_regex = r"\s*".join(code_parts)
+    
+    # Boundary patterns to ensure we don't match part of another code
+    border_start = r"(?:^|[\s,.;!?-])"
+    border_end = r"(?=[\s,.;!?-]|$)"
+    
+    # Patterns to detect exclusion
+    exclusion_patterns = [
+        rf"(?i)(?:remove|missing)\s+(?:.*?\s+)?{code_regex}{border_end}",
+        rf"(?i){border_start}{code_regex}\s+is\s+missing"
+    ]
 
     for accessory in inventory_matches:
         accessory_id = accessory["id"]
@@ -671,17 +686,16 @@ def find_available_accessory(cursor, sku, accessory_code):
         )
         remarks = cursor.fetchall()
         is_removed = False
+        
         for remark_row in remarks:
             content = remark_row["content"]
-            if content:
-                remove_patterns = re.findall(
-                    r"remove\s+(.*?)(?:\s+-|\s*$|\s*\n)", content, re.IGNORECASE
-                )
-                for removed_item in remove_patterns:
-                    normalized_removed = removed_item.replace(" ", "").lower()
-                    if normalized_removed == normalized_code:
-                        is_removed = True
-                        break
+            if not content:
+                continue
+                
+            for pattern in exclusion_patterns:
+                if re.search(pattern, content):
+                    is_removed = True
+                    break
             if is_removed:
                 break
 

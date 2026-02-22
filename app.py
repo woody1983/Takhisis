@@ -39,7 +39,12 @@ def generate_work_order_id():
 
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
-CORS(app)  # Enable CORS for React frontend
+CORS(
+    app,
+    resources={
+        r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}
+    },
+)
 DB_PATH = "accessories.db"
 
 
@@ -524,7 +529,7 @@ def api_get_work_orders():
         # Exclude location and customer_service_name from list view
         cursor.execute(
             """
-            SELECT id, sku, accessory_code, quantity, status, match_status, remark, created_at, completed_at 
+            SELECT id, sku, accessory_code, quantity, status, match_status, location, customer_service_name, remark, created_at, completed_at 
             FROM work_orders 
             ORDER BY 
                 CASE status 
@@ -547,7 +552,7 @@ def api_get_work_orders():
         # Exclude location and customer_service_name from list view
         cursor.execute(
             """
-            SELECT id, sku, accessory_code, quantity, status, match_status, remark, created_at, completed_at 
+            SELECT id, sku, accessory_code, quantity, status, match_status, location, customer_service_name, remark, created_at, completed_at 
             FROM work_orders 
             WHERE status = ? 
             ORDER BY created_at DESC
@@ -1343,6 +1348,21 @@ def update_accessory(id):
     conn.close()
 
     return redirect(url_for("detail", id=id))
+
+
+@app.route("/api/remarks/<int:id>", methods=["DELETE"])
+def api_delete_remark(id):
+    """Delete a remark"""
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM remarks WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Remark deleted"})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @app.route("/delete-remark/<int:remark_id>", methods=["POST"])

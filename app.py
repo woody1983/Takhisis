@@ -226,7 +226,8 @@ def api_add_accessory():
 
         accessory_id = cursor.lastrowid
 
-        # Update location usage count
+        # Ensure location exists and update usage count
+        cursor.execute("INSERT OR IGNORE INTO locations (name) VALUES (?)", (location,))
         cursor.execute(
             """
             UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?
@@ -336,6 +337,10 @@ def api_update_accessory(id):
     cursor = conn.cursor()
 
     try:
+        # Get old location before updating
+        cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
+        old_location = cursor.fetchone()["location"]
+
         # Update location and timestamp
         cursor.execute(
             """
@@ -345,6 +350,22 @@ def api_update_accessory(id):
         """,
             (location, datetime.now(), id),
         )
+
+        if old_location != location:
+            # Decrement old location count
+            cursor.execute(
+                "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
+                (old_location,),
+            )
+
+            # Ensure new location exists and increment count
+            cursor.execute(
+                "INSERT OR IGNORE INTO locations (name) VALUES (?)", (location,)
+            )
+            cursor.execute(
+                "UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?",
+                (location,),
+            )
 
         # Add new remark if provided
         if new_remark:
@@ -372,7 +393,19 @@ def api_delete_accessory(id):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
+        # Get location before deleting
+        cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        if row:
+            location = row["location"]
+            cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
+
+            # Decrement usage count
+            cursor.execute(
+                "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
+                (location,),
+            )
+
         conn.commit()
         conn.close()
         return jsonify({"success": True, "message": "Deleted successfully"})
@@ -1324,6 +1357,10 @@ def update_accessory(id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Get old location before updating
+    cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
+    old_location = cursor.fetchone()["location"]
+
     # Update location and timestamp
     cursor.execute(
         """
@@ -1333,6 +1370,18 @@ def update_accessory(id):
     """,
         (location, datetime.now(), id),
     )
+
+    if old_location != location:
+        # Decrement old location count
+        cursor.execute(
+            "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
+            (old_location,),
+        )
+        # Increment new location count
+        cursor.execute(
+            "UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?",
+            (location,),
+        )
 
     # Add new remark if provided
     if new_remark:
@@ -1390,7 +1439,17 @@ def delete_accessory(id):
     """Delete accessory and redirect to index"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
+    # Get location before deleting
+    cursor.execute("SELECT location FROM accessories WHERE id = ?", (id,))
+    row = cursor.fetchone()
+    if row:
+        location = row["location"]
+        cursor.execute("DELETE FROM accessories WHERE id = ?", (id,))
+        # Decrement usage count
+        cursor.execute(
+            "UPDATE locations SET usage_count = MAX(0, usage_count - 1) WHERE name = ?",
+            (location,),
+        )
     conn.commit()
     conn.close()
     return redirect(url_for("index"))
@@ -1449,7 +1508,8 @@ def add_accessory_legacy():
 
         accessory_id = cursor.lastrowid
 
-        # Update location usage count
+        # Ensure location exists and update usage count
+        cursor.execute("INSERT OR IGNORE INTO locations (name) VALUES (?)", (location,))
         cursor.execute(
             """
             UPDATE locations SET usage_count = usage_count + 1 WHERE name = ?
@@ -1526,4 +1586,4 @@ if __name__ == "__main__":
     init_db()
     print("Accessory Management System API starting...")
     print("API URL: http://127.0.0.1:5001/api")
-    app.run(debug=True, host="0.0.0.0", port=5002)
+    app.run(debug=True, host="0.0.0.0", port=5001)

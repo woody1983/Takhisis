@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, ExternalLink, RefreshCw } from 'lucide-react';
+import { Trash2, Eye, RefreshCw } from 'lucide-react';
 import apiClient from '../apiClient';
 import Pagination from '../components/Pagination';
 import SKUStatistics from '../components/SKUStatistics';
 import AddAccessoryForm from '../components/AddAccessoryForm';
+import AccessoryDetailModal from '../components/AccessoryDetailModal';
 
 interface Accessory {
   id: number;
@@ -28,6 +29,8 @@ const AccessoriesPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedAccessoryId, setSelectedAccessoryId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchAccessories = async () => {
     setLoading(true);
@@ -56,6 +59,11 @@ const AccessoriesPage = () => {
     } catch (error) {
       alert('Failed to delete accessory');
     }
+  };
+
+  const openAccessoryDetail = (id: number) => {
+    setSelectedAccessoryId(id);
+    setIsModalOpen(true);
   };
 
   const refresh = () => setRefreshKey(prev => prev + 1);
@@ -121,13 +129,13 @@ const AccessoriesPage = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-center gap-2">
-                        <Link 
-                          to={`/accessory/${item.id}`}
+                        <button 
+                          onClick={() => openAccessoryDetail(item.id)}
                           className="p-2 bg-green-600/20 text-green-500 hover:bg-green-600 hover:text-white rounded transition-colors"
                           title="Details"
                         >
-                          <ExternalLink size={16} />
-                        </Link>
+                          <Eye size={16} />
+                        </button>
                         <button 
                           className="p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded transition-colors"
                           title="Delete"
@@ -162,6 +170,13 @@ const AccessoriesPage = () => {
           More statistics coming soon...
         </div>
       </div>
+
+      <AccessoryDetailModal
+        isOpen={isModalOpen}
+        accessoryId={selectedAccessoryId}
+        onClose={() => setIsModalOpen(false)}
+        onUpdate={fetchAccessories}
+      />
     </div>
   );
 };

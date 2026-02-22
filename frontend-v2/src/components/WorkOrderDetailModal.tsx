@@ -45,13 +45,10 @@ const WorkOrderDetailModal = ({ workOrder, isOpen, onClose }: WorkOrderDetailMod
       const fetchAccessoryDetails = async () => {
         setLoading(true);
         try {
-          // Find accessory by SKU and Location to get full details and remarks
-          // Since the API doesn't have a direct "find by sku+loc", we'll use the SKU detail API
           const response = await apiClient.get(`/sku/${workOrder.sku}`);
           const match = response.data.accessories.find((a: any) => a.location === workOrder.location);
           
           if (match) {
-            // Get full details including all remarks
             const detailRes = await apiClient.get(`/accessories/${match.id}`);
             setAccessory(detailRes.data.accessory);
             setRemarks(detailRes.data.remarks);
@@ -72,8 +69,14 @@ const WorkOrderDetailModal = ({ workOrder, isOpen, onClose }: WorkOrderDetailMod
   if (!isOpen || !workOrder) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-gray-800 w-full max-w-2xl rounded-xl shadow-2xl border border-gray-700 overflow-hidden max-h-[90vh] flex flex-col">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-gray-800 w-full max-w-2xl rounded-xl shadow-2xl border border-gray-700 overflow-hidden max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center p-6 border-b border-gray-700 bg-gray-900/50">
           <div className="flex items-center gap-3">
             <ClipboardList className="text-blue-500" size={24} />

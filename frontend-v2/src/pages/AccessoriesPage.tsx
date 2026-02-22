@@ -4,6 +4,7 @@ import { Trash2, Eye, RefreshCw } from 'lucide-react';
 import apiClient from '../apiClient';
 import Pagination from '../components/Pagination';
 import SKUStatistics from '../components/SKUStatistics';
+import SKUOrderAnalytics from '../components/SKUOrderAnalytics';
 import AddAccessoryForm from '../components/AddAccessoryForm';
 import AccessoryDetailModal from '../components/AccessoryDetailModal';
 
@@ -166,9 +167,7 @@ const AccessoriesPage = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <SKUStatistics refreshKey={refreshKey} />
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 flex items-center justify-center text-gray-500 italic">
-          More statistics coming soon...
-        </div>
+        <SKUOrderAnalytics refreshKey={refreshKey} />
       </div>
 
       <AccessoryDetailModal

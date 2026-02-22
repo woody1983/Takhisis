@@ -531,6 +531,54 @@ def api_get_sku_stats():
     return jsonify(sorted_stats)
 
 
+@app.route("/api/sku-order-stats", methods=["GET"])
+def api_get_sku_order_stats():
+    """Get SKU inventory count vs work order count (pending + completed) for analytics panel"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get inventory counts grouped by base SKU
+    cursor.execute("SELECT sku FROM accessories")
+    inventory_counts = {}
+    for row in cursor.fetchall():
+        sku = row["sku"]
+        base_sku = sku.split("*")[0] if "*" in sku else sku
+        inventory_counts[base_sku] = inventory_counts.get(base_sku, 0) + 1
+
+    # Get work order counts grouped by SKU and status
+    cursor.execute("""
+        SELECT sku, status, COUNT(*) as cnt 
+        FROM work_orders 
+        WHERE status IN ('pending', 'completed')
+        GROUP BY sku, status
+    """)
+    order_pending = {}
+    order_completed = {}
+    for row in cursor.fetchall():
+        sku = row["sku"]
+        base_sku = sku.split("*")[0] if "*" in sku else sku
+        if row["status"] == "pending":
+            order_pending[base_sku] = order_pending.get(base_sku, 0) + row["cnt"]
+        else:
+            order_completed[base_sku] = order_completed.get(base_sku, 0) + row["cnt"]
+
+    conn.close()
+
+    # Combine all SKUs from both sources
+    all_skus = set(inventory_counts.keys()) | set(order_pending.keys()) | set(order_completed.keys())
+
+    result = []
+    for sku in sorted(all_skus):
+        result.append({
+            "sku": sku,
+            "inventory": inventory_counts.get(sku, 0),
+            "pending": order_pending.get(sku, 0),
+            "completed": order_completed.get(sku, 0),
+        })
+
+    return jsonify(result)
+
+
 @app.route("/api/sku/<sku>", methods=["GET"])
 def api_get_sku_detail(sku):
     """Get accessories for specific SKU"""

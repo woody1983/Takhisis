@@ -152,6 +152,44 @@ def api_get_accessories():
     )
 
 
+def force_rematch_all_pending_orders(cursor):
+    """
+    Force a re-match for all pending work orders to ensure their match_status
+    is up-to-date with the current inventory state.
+    """
+    # Get all pending work orders
+    cursor.execute(
+        "SELECT id, sku, accessory_code, match_status, location FROM work_orders WHERE status = 'pending'"
+    )
+    pending_orders = cursor.fetchall()
+
+    for order in pending_orders:
+        order_id = order["id"]
+        sku = order["sku"]
+        accessory_code = order["accessory_code"]
+        current_match_status = order["match_status"]
+        current_location = order["location"]
+
+        # Find the best available match right now
+        new_match = find_available_accessory(cursor, sku, accessory_code)
+
+        if new_match:
+            new_location = new_match["location"]
+            # If the order was 'new_one' or if the location has changed, update it
+            if current_match_status != "matched" or current_location != new_location:
+                cursor.execute(
+                    "UPDATE work_orders SET match_status = 'matched', location = ? WHERE id = ?",
+                    (new_location, order_id),
+                )
+        else:
+            # If no match is found, ensure the status is 'new_one'
+            if current_match_status != "new_one":
+                cursor.execute(
+                    "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
+                    (order_id,),
+                )
+
+
 @app.route("/api/accessories", methods=["POST"])
 def api_add_accessory():
     """Add new accessory"""
@@ -201,6 +239,10 @@ def api_add_accessory():
                 (accessory_id, remark, datetime.now()),
             )
 
+        # After adding, check if any 'new_one' work orders can now be matched
+        # Use the original SKU, not the potentially modified final_sku
+        re_match_new_one_work_orders(cursor, sku)
+
         conn.commit()
         conn.close()
 
@@ -242,6 +284,40 @@ def api_get_accessory(id):
     conn.close()
 
     return jsonify({"accessory": dict(accessory), "remarks": remarks})
+
+
+def re_match_new_one_work_orders(cursor, sku):
+    """After adding a new accessory, re-match work orders waiting for it."""
+    # Find pending work orders that need this SKU and are marked as 'new_one'
+    cursor.execute(
+        """
+        SELECT id, accessory_code FROM work_orders
+        WHERE status = 'pending'
+          AND match_status = 'new_one'
+          AND sku = ?
+    """,
+        (sku,),
+    )
+    eligible_orders = cursor.fetchall()
+
+    for order in eligible_orders:
+        order_id = order["id"]
+        accessory_code = order["accessory_code"]
+
+        # Try to find an available accessory for this work order
+        match = find_available_accessory(cursor, sku, accessory_code)
+
+        if match:
+            # If a match is found, update the work order
+            new_location = match["location"]
+            cursor.execute(
+                """
+                UPDATE work_orders 
+                SET match_status = 'matched', location = ? 
+                WHERE id = ?
+            """,
+                (new_location, order_id),
+            )
 
 
 @app.route("/api/accessories/<int:id>", methods=["PUT"])
@@ -433,6 +509,11 @@ def api_get_work_orders():
     conn = get_db()
     cursor = conn.cursor()
 
+    # ===== Force re-match for all pending orders before fetching =====
+    force_rematch_all_pending_orders(cursor)
+    conn.commit()  # Commit any changes from the re-match
+    # =================================================================
+
     # Build query with status priority: pending > completed > cancelled
     if status == "all":
         # Get total count first
@@ -509,6 +590,50 @@ def api_get_work_orders():
     )
 
 
+def find_available_accessory(cursor, sku, accessory_code):
+    """Find an available accessory for a given SKU and accessory_code, including variants."""
+    # Find accessories matching the base SKU or its variants (e.g., SKU*1)
+    cursor.execute(
+        "SELECT id, location FROM accessories WHERE sku = ? OR sku LIKE ? ORDER BY updated_at DESC",
+        (sku, f"{sku}*%"),
+    )
+    inventory_matches = cursor.fetchall()
+
+    if not inventory_matches:
+        return None
+
+    import re
+
+    normalized_code = accessory_code.replace(" ", "").lower()
+
+    for accessory in inventory_matches:
+        accessory_id = accessory["id"]
+        cursor.execute(
+            "SELECT content FROM remarks WHERE accessory_id = ? ORDER BY created_at DESC",
+            (accessory_id,),
+        )
+        remarks = cursor.fetchall()
+        is_removed = False
+        for remark_row in remarks:
+            content = remark_row["content"]
+            if content:
+                remove_patterns = re.findall(
+                    r"remove\s+(.*?)(?:\s+-|\s*$|\s*\n)", content, re.IGNORECASE
+                )
+                for removed_item in remove_patterns:
+                    normalized_removed = removed_item.replace(" ", "").lower()
+                    if normalized_removed == normalized_code:
+                        is_removed = True
+                        break
+            if is_removed:
+                break
+
+        if not is_removed:
+            return accessory  # Return the matched accessory object
+
+    return None
+
+
 @app.route("/api/work-orders", methods=["POST"])
 def api_add_work_order():
     """Add new work order with automatic inventory matching"""
@@ -542,74 +667,15 @@ def api_add_work_order():
     cursor = conn.cursor()
 
     try:
-        # Check if SKU exists in inventory and accessory_code is available
-        cursor.execute(
-            "SELECT id, location FROM accessories WHERE sku = ? ORDER BY updated_at DESC",
-            (sku,),
-        )
-        inventory_matches = cursor.fetchall()
+        matched_accessory = find_available_accessory(cursor, sku, accessory_code)
 
-        matched_accessory = None
         match_status = "new_one"
         location = None
-
-        if inventory_matches:
-            # Check each accessory to see if accessory_code is available
-            for accessory in inventory_matches:
-                accessory_id = accessory["id"]
-
-                # Get all remarks for this accessory
-                cursor.execute(
-                    "SELECT content FROM remarks WHERE accessory_id = ? ORDER BY created_at DESC",
-                    (accessory_id,),
-                )
-                remarks = cursor.fetchall()
-
-                # Check if accessory_code has been removed
-                is_removed = False
-                import re
-
-                # Normalize accessory_code by removing spaces for comparison
-                # e.g., "part A" -> "partA", "Part 1" -> "Part1"
-                normalized_code = accessory_code.replace(" ", "").lower()
-
-                for remark_row in remarks:
-                    content = remark_row["content"]
-                    if content:
-                        # Find all "remove <something>" patterns in the content
-                        # Pattern matches: "remove xxx", "remove xxx -", "remove xxx\n", or "remove xxx at end"
-                        # The (.*?) captures everything after remove until end of line or " -"
-                        remove_patterns = re.findall(
-                            r"remove\s+(.*?)(?:\s+-|\s*$|\s*\n)", content, re.IGNORECASE
-                        )
-
-                        for removed_item in remove_patterns:
-                            # Normalize the removed item (remove spaces and lowercase)
-                            normalized_removed = removed_item.replace(" ", "").lower()
-
-                            # Check if it matches our accessory_code
-                            if normalized_removed == normalized_code:
-                                is_removed = True
-                                break
-
-                        if is_removed:
-                            break
-
-                if not is_removed:
-                    # Found an available accessory
-                    matched_accessory = accessory
-                    match_status = "matched"
-                    location = accessory["location"]
-                    break
-
-            if not matched_accessory:
-                # All accessories have this accessory_code removed
-                match_status = "new_one"
-                location = None
+        if matched_accessory:
+            match_status = "matched"
+            location = matched_accessory["location"]
 
         message = "Work order created successfully"
-
-        # Generate random 6-digit ID
         order_id = generate_work_order_id()
 
         cursor.execute(
@@ -646,6 +712,42 @@ def api_add_work_order():
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+def re_match_pending_work_orders(cursor, sku, accessory_code, old_location):
+    """Re-match pending work orders that were matched to a now-used accessory"""
+    # Find other pending work orders that were matched to the same accessory
+    cursor.execute(
+        """
+        SELECT id FROM work_orders
+        WHERE status = 'pending'
+          AND match_status = 'matched'
+          AND sku = ?
+          AND accessory_code = ?
+          AND location = ?
+    """,
+        (sku, accessory_code, old_location),
+    )
+    affected_orders = cursor.fetchall()
+
+    for order in affected_orders:
+        order_id = order["id"]
+        # Try to find a new available accessory
+        new_match = find_available_accessory(cursor, sku, accessory_code)
+
+        if new_match:
+            # If a new match is found, update the work order
+            new_location = new_match["location"]
+            cursor.execute(
+                "UPDATE work_orders SET location = ? WHERE id = ?",
+                (new_location, order_id),
+            )
+        else:
+            # If no new match is found, update status to 'new_one'
+            cursor.execute(
+                "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
+                (order_id,),
+            )
 
 
 @app.route("/api/work-orders/<int:id>", methods=["PUT"])
@@ -698,6 +800,14 @@ def api_update_work_order(id):
                     """,
                         (accessory["id"], remove_mark, datetime.now()),
                     )
+
+                # After completing a matched order, re-match other pending orders
+                re_match_pending_work_orders(
+                    cursor,
+                    work_order["sku"],
+                    work_order["accessory_code"],
+                    work_order["location"],
+                )
         else:
             cursor.execute(
                 """
@@ -724,6 +834,35 @@ def api_get_work_order(id):
     cursor = conn.cursor()
 
     try:
+        # Force a re-match on this specific order before displaying
+        cursor.execute(
+            "SELECT status, sku, accessory_code, match_status, location FROM work_orders WHERE id = ? AND status = 'pending'",
+            (id,),
+        )
+        order_to_check = cursor.fetchone()
+
+        if order_to_check:
+            new_match = find_available_accessory(
+                cursor, order_to_check["sku"], order_to_check["accessory_code"]
+            )
+            if new_match:
+                if (
+                    order_to_check["match_status"] != "matched"
+                    or order_to_check["location"] != new_match["location"]
+                ):
+                    cursor.execute(
+                        "UPDATE work_orders SET match_status = 'matched', location = ? WHERE id = ?",
+                        (new_match["location"], id),
+                    )
+                    conn.commit()
+            else:
+                if order_to_check["match_status"] != "new_one":
+                    cursor.execute(
+                        "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
+                        (id,),
+                    )
+                    conn.commit()
+
         # Get work order details
         cursor.execute(
             """
@@ -1019,6 +1158,35 @@ def work_order_detail(id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Force a re-match on this specific order before displaying
+    cursor.execute(
+        "SELECT status, sku, accessory_code, match_status, location FROM work_orders WHERE id = ? AND status = 'pending'",
+        (id,),
+    )
+    order_to_check = cursor.fetchone()
+
+    if order_to_check:
+        new_match = find_available_accessory(
+            cursor, order_to_check["sku"], order_to_check["accessory_code"]
+        )
+        if new_match:
+            if (
+                order_to_check["match_status"] != "matched"
+                or order_to_check["location"] != new_match["location"]
+            ):
+                cursor.execute(
+                    "UPDATE work_orders SET match_status = 'matched', location = ? WHERE id = ?",
+                    (new_match["location"], id),
+                )
+                conn.commit()
+        else:
+            if order_to_check["match_status"] != "new_one":
+                cursor.execute(
+                    "UPDATE work_orders SET match_status = 'new_one', location = NULL WHERE id = ?",
+                    (id,),
+                )
+                conn.commit()
+
     # Get work order
     cursor.execute("SELECT * FROM work_orders WHERE id = ?", (id,))
     row = cursor.fetchone()
@@ -1279,6 +1447,9 @@ def add_accessory_legacy():
                 (accessory_id, remark, datetime.now()),
             )
 
+        # Re-match 'new_one' work orders for this SKU
+        re_match_new_one_work_orders(cursor, sku)
+
         conn.commit()
         conn.close()
 
@@ -1335,4 +1506,4 @@ if __name__ == "__main__":
     init_db()
     print("Accessory Management System API starting...")
     print("API URL: http://127.0.0.1:5001/api")
-    app.run(debug=True, host="0.0.0.0", port=5001)
+    app.run(debug=True, host="0.0.0.0", port=5002)

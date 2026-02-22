@@ -1390,6 +1390,99 @@ class TestWorkOrderInventoryMatching:
         html = response.data.decode("utf-8")
         assert "Remark History" in html
 
+    def test_re_match_work_order_on_completion(self, client):
+        """
+        Test Issue #21:
+        When a matched WO is completed, other WOs matched to the same accessory
+        should be re-matched.
+        """
+        # 1. Setup: Add one accessory and two work orders that match it.
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO accessories (sku, location) VALUES (?, ?)",
+            ("REMATCH-001", "R-01-01"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create WO1
+        response1 = client.post(
+            "/api/work-orders",
+            json={"sku": "REMATCH-001", "accessory_code": "partA", "quantity": 1},
+            content_type="application/json",
+        )
+        wo1_id = response1.get_json()["id"]
+        assert response1.get_json()["match_status"] == "matched"
+
+        # Create WO2
+        response2 = client.post(
+            "/api/work-orders",
+            json={"sku": "REMATCH-001", "accessory_code": "partA", "quantity": 1},
+            content_type="application/json",
+        )
+        wo2_id = response2.get_json()["id"]
+        assert response2.get_json()["match_status"] == "matched"
+
+        # 2. Action: Complete the first work order
+        client.put(
+            f"/api/work-orders/{wo1_id}",
+            json={"status": "completed"},
+            content_type="application/json",
+        )
+
+        # 3. Verification: The second work order should now be 'new_one'
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT match_status, location FROM work_orders WHERE id = ?", (wo2_id,)
+        )
+        wo2_details = cursor.fetchone()
+        conn.close()
+
+        assert wo2_details["match_status"] == "new_one"
+        assert wo2_details["location"] is None
+
+    def test_re_match_work_order_on_new_accessory_add(self, client):
+        """
+        Test Issue #21:
+        When a new accessory is added, 'new_one' WOs for that SKU should be
+        re-matched.
+        """
+        # 1. Setup: Create a work order that is 'new_one'
+        response = client.post(
+            "/api/work-orders",
+            json={"sku": "REMATCH-002", "accessory_code": "partB", "quantity": 1},
+            content_type="application/json",
+        )
+        wo_id = response.get_json()["id"]
+        assert response.get_json()["match_status"] == "new_one"
+
+        # 2. Action: Add a new accessory that matches the work order
+        response = client.post(
+            "/api/accessories",
+            json={"sku": "REMATCH-002", "location": "R-02-02", "remark": ""},
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+
+        # 3. Verification: The work order should now be 'matched'
+        db_path = client.application.config.get("DB_PATH")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT match_status, location FROM work_orders WHERE id = ?", (wo_id,)
+        )
+        wo_details = cursor.fetchone()
+        conn.close()
+
+        assert wo_details["match_status"] == "matched"
+        assert wo_details["location"] == "R-02-02"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

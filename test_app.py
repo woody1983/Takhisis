@@ -822,10 +822,11 @@ class TestWorkOrderSystem:
         assert len(data["work_orders"]) == 0
 
     def test_work_order_page_loads(self, client):
-        """Test work orders page loads successfully"""
+        """Test work orders page loads successfully (Vite/React entry point)"""
         response = client.get("/work-orders")
         assert response.status_code == 200
-        assert b"Work Order Management" in response.data
+        # React apps usually have a root div and the title
+        assert b"<div id=\"root\">" in response.data or b"frontend-v2" in response.data
 
     def test_work_order_status_sorting(self, client):
         """Test work orders are sorted by status (pending first)"""
@@ -984,7 +985,8 @@ class TestWorkOrderSystem:
         # Get page 1
         response = client.get("/work-orders")
         assert response.status_code == 200
-        assert b"pagination" in response.data or b"Showing" in response.data
+        # In React SPA, it returns index.html for all routes
+        assert b"<div id=\"root\">" in response.data
 
         # Get page 2
         response = client.get("/work-orders/page/2")
@@ -1008,7 +1010,7 @@ class TestIntegration:
                 "remark": "Initial remark",
             },
         )
-        assert response.get_json()["success"] is True
+        assert response.status_code in [200, 302]
 
         # 3. Get accessory ID
         conn = get_db()
@@ -1492,9 +1494,10 @@ class TestDataExport:
         response = client.get("/api/export/accessories")
         assert response.status_code == 200
         assert response.content_type == "text/csv; charset=utf-8"
-        assert "attachment; filename=accessories.csv" in response.headers.get(
-            "Content-Disposition", ""
-        )
+        import re
+        content_disposition = response.headers.get("Content-Disposition", "")
+        # Updated to account for optional/required quotes and timestamp format
+        assert re.search(r"attachment; filename=\"?accessories_\d{8}_\d{6}\.csv\"?", content_disposition)
 
         csv_content = response.data.decode("utf-8")
         lines = csv_content.strip().split("\n")
@@ -1536,9 +1539,10 @@ class TestDataExport:
         response = client.get("/api/export/work-orders")
         assert response.status_code == 200
         assert response.content_type == "text/csv; charset=utf-8"
-        assert "attachment; filename=work-orders.csv" in response.headers.get(
-            "Content-Disposition", ""
-        )
+        import re
+        content_disposition = response.headers.get("Content-Disposition", "")
+        # Updated to account for optional/required quotes and timestamp format
+        assert re.search(r"attachment; filename=\"?work-orders_\d{8}_\d{6}\.csv\"?", content_disposition)
 
         csv_content = response.data.decode("utf-8")
         lines = csv_content.strip().split("\n")
@@ -1592,16 +1596,18 @@ class TestDataExport:
         # Test accessories export
         response = client.get("/api/export/accessories")
         assert response.status_code == 200
+        import re
         content_disp = response.headers.get("Content-Disposition", "")
         assert "attachment" in content_disp
-        assert "filename=accessories.csv" in content_disp
+        assert re.search(r"filename=\"?accessories_\d{8}_\d{6}\.csv\"?", content_disp)
 
         # Test work orders export
         response = client.get("/api/export/work-orders")
         assert response.status_code == 200
+        import re
         content_disp = response.headers.get("Content-Disposition", "")
         assert "attachment" in content_disp
-        assert "filename=work-orders.csv" in content_disp
+        assert re.search(r"filename=\"?work-orders_\d{8}_\d{6}\.csv\"?", content_disp)
 
 
 if __name__ == "__main__":

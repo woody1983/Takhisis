@@ -61,7 +61,10 @@ app = Flask(__name__, static_folder="frontend-v2/dist", static_url_path="")
 CORS(
     app,
     resources={
-        r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}
+        r"/api/*": {
+            "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+            "expose_headers": ["Content-Disposition"]
+        }
     },
 )
 DB_PATH = "accessories.db"
@@ -628,7 +631,7 @@ def api_export_accessories():
 
     response = make_response(output.getvalue())
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -686,7 +689,7 @@ def api_export_work_orders():
 
     response = make_response(output.getvalue())
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
